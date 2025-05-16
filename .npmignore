@@ -1,0 +1,9 @@
+src/
+node_modules/
+.git/
+.github/
+tests/
+.idea/
+.vscode/
+.DS_Store
+*.log
