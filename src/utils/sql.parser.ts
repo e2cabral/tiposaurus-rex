@@ -1,12 +1,14 @@
 import { injectable } from 'inversify';
 import { SQLParser, SQLParserOptions } from '../core/domain/interfaces/sql.interface';
-import { QueryDefinition, QueryParameter } from '../core/domain/interfaces/template.interface';
+import {QueryDefinition, QueryParameter, ReturnField} from '../core/domain/interfaces/template.interface';
 
 @injectable()
 export class SQLParserImpl implements SQLParser {
-  private readonly QUERY_PATTERN = /--\s*@name\s+([\w.]+)\s*(?:--\s*@param\s+[\w:]+\s*)*(?:--\s*@returns\s+([\w\[\]<>]+))?\s*([\s\S]+?)(?=--\s*@name|$)/g;
+  private readonly QUERY_PATTERN = /--\s*@name\s+([\w.]+)\s*(?:--\s*@param\s+[\w:]+\s*)*(?:--\s*@returnType\s+([\w\[\]<>]+))?\s*(?:--\s*@returnSingle\s+(true|false))?\s*([\s\S]+?)(?=--\s*@name|$)/g;
   private readonly PARAM_PATTERN = /--\s*@param\s+([\w:]+)/g;
   private readonly DESCRIPTION_PATTERN = /--\s*@description\s+(.+?)(?=\n--\s*@|\n\n|$)/;
+  private readonly RETURN_SINGLE_PATTERN = /--\s*@returnSingle\s+(true|false)/;
+  private readonly RETURN_FIELD_PATTERN = /--\s*@return\s+([\w.]+)(?:\s+as\s+([\w]+))?(?:\s*:\s*([\w\[\]<>]+))?/g;
 
   constructor(private options: SQLParserOptions = {}) {
     this.options = {
@@ -23,7 +25,7 @@ export class SQLParserImpl implements SQLParser {
     this.QUERY_PATTERN.lastIndex = 0;
 
     while ((match = this.QUERY_PATTERN.exec(content)) !== null) {
-      const [fullMatch, name, returnType, sql] = match;
+      const [fullMatch, name, returnType, returnSingleStr, sql] = match;
 
       const descMatch = fullMatch.match(this.DESCRIPTION_PATTERN);
       const description = descMatch ? descMatch[1].trim() : undefined;
@@ -37,7 +39,31 @@ export class SQLParserImpl implements SQLParser {
         };
       });
 
-      const returnSingle = returnType && !returnType.endsWith('[]');
+      const returnFieldMatches = Array.from(fullMatch.matchAll(this.RETURN_FIELD_PATTERN));
+      const returnFields: ReturnField[] = returnFieldMatches.map(fieldMatch => {
+        const [sourceField, alias, type] = [fieldMatch[1], fieldMatch[2], fieldMatch[3]];
+
+        const parts = sourceField.split('.');
+        let sourceTable: string | undefined;
+        let actualField = sourceField;
+        
+        if (parts.length > 1) {
+          sourceTable = parts[0];
+          actualField = parts[1];
+        }
+        
+        return {
+          sourceField: actualField,
+          sourceTable,
+          alias: alias || actualField,
+          type: type
+        };
+      });
+
+      let returnSingleMatch = fullMatch.match(this.RETURN_SINGLE_PATTERN);
+      const returnSingle = returnSingleMatch 
+        ? returnSingleMatch[1] === 'true'
+        : (returnSingleStr === 'true' || (returnType && !returnType.endsWith('[]')));
 
       queries.push({
         name,
@@ -45,7 +71,8 @@ export class SQLParserImpl implements SQLParser {
         sql: sql.trim(),
         params,
         returnType: returnType || 'any',
-        returnSingle: !!returnSingle
+        returnSingle: !!returnSingle,
+        returnFields: returnFields.length > 0 ? returnFields : undefined
       });
     }
 
