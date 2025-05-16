@@ -9,6 +9,14 @@ export interface QueryParameter {
   type: string;
 }
 
+export interface ReturnField {
+  sourceField: string;
+  alias?: string;
+  sourceTable?: string;
+  type?: string;
+  nullable?: boolean;
+}
+
 export interface QueryDefinition {
   name: string;
   description?: string;
@@ -16,6 +24,7 @@ export interface QueryDefinition {
   params: QueryParameter[];
   returnType: string;
   returnSingle: boolean;
+  returnFields?: ReturnField[];
 }
 
 export interface TemplateContext {
