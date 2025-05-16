@@ -1,0 +1,10 @@
+/**
+ * Interface gerada para a tabela: {{tableName}}
+ * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * @timestamp {{timestamp}}
+ */
+export interface {{pascalCase interfaceName}} {
+{{#each fields}}
+  {{name}}{{#if nullable}}?{{/if}}: {{type}};
+{{/each}}
+}
