@@ -1,29 +1,34 @@
+{{#if query.description}}
 /**
- * {{query.name}}
- * {{#if query.description}}{{query.description}}{{/if}}
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
- * @timestamp {{timestamp}}
+ * {{query.description}}
  */
+{{/if}}
 
-export interface {{pascalCase query.name}}Params {
-{{#each query.params}}
-  {{name}}: {{type}};
-{{/each}}
+export interface {{query.name}}Params {
+  {{#each query.params}}
+  {{this.name}}: {{this.type}};
+  {{/each}}
 }
 
-export type {{pascalCase query.name}}Result = {{#if query.returnSingle}}{{query.returnType}}{{else}}{{query.returnType}}[]{{/if}};
+{{#if query.returnFields}}
+export interface {{query.returnType}} {
+  {{#each query.returnFields}}
+  {{this.alias}}{{#if this.nullable}}?{{/if}}: {{this.type}};
+  {{/each}}
+}
+{{/if}}
 
-export const {{camelCase query.name}}Query = `{{query.sql}}`;
+export type {{query.name}}Result = {{query.returnType}};
 
-/**
- * Executa a consulta {{query.name}}
- * @param db Conexão com o banco de dados
- * @param params Parâmetros da consulta
- * @returns Resultado da consulta
- */
-export async function {{camelCase query.name}}(
+export async function {{query.name}}(
   db: any,
-  params: {{pascalCase query.name}}Params
-): Promise<{{pascalCase query.name}}Result{{#unless query.returnSingle}}[]{{/unless}}> {
-  return db.execute<{{pascalCase query.name}}Result>({{camelCase query.name}}Query, Object.values(params));
+  params: {{query.name}}Params
+): Promise<{{#if query.returnSingle}}{{query.name}}Result{{else}}{{query.name}}Result[]{{/if}}> {
+  const result = await db.execute<{{query.name}}Result>(`{{{query.sql}}}`, [
+    {{#each query.params}}
+    params.{{this.name}},
+    {{/each}}
+  ]);
+  
+  return {{#if query.returnSingle}}result[0]{{else}}result{{/if}};
 }
