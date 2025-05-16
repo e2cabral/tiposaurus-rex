@@ -1,6 +1,7 @@
 import { injectable, inject } from 'inversify';
 import mysql from 'mysql2/promise';
 import { DatabaseConnector, DatabaseConfig, TableMetadata, QueryResult, ColumnMetadata } from '../../core/domain/interfaces/database.interface';
+import {ReturnField} from "@core/domain/interfaces/template.interface.js";
 
 @injectable()
 export class MySQLConnector implements DatabaseConnector {
@@ -106,5 +107,64 @@ export class MySQLConnector implements DatabaseConnector {
 
     const [rows] = await this.connection!.query(query, params);
     return rows as T[];
+  }
+
+  async analyzeQueryWithFields(query: string, fields: ReturnField[]): Promise<QueryResult> {
+    if (!this.connection) {
+      await this.connect();
+    }
+
+    try {
+      const tableAliasMap = new Map<string, string>();
+      const aliasPattern = /(?:FROM|JOIN)\s+(\w+)(?:\s+(?:as\s+)?(\w+))?/gi;
+      let aliasMatch;
+      
+      while ((aliasMatch = aliasPattern.exec(query)) !== null) {
+        const tableName = aliasMatch[1].trim();
+        const alias = aliasMatch[2]?.trim();
+        
+        if (alias) {
+          tableAliasMap.set(alias, tableName);
+        }
+      }
+
+      const resultFields: ColumnMetadata[] = [];
+      
+      for (const field of fields) {
+        let tableName = field.sourceTable;
+
+        if (tableName && tableAliasMap.has(tableName)) {
+          tableName = tableAliasMap.get(tableName)!;
+        }
+
+        if (tableName) {
+          try {
+            const tableMetadata = await this.describeTable(tableName);
+            const columnMetadata = tableMetadata.columns.find(col => col.name === field.sourceField);
+            
+            if (columnMetadata) {
+              resultFields.push({
+                name: field.alias || field.sourceField,
+                type: columnMetadata.type,
+                nullable: field.nullable !== undefined ? field.nullable : columnMetadata.nullable
+              });
+              continue;
+            }
+          } catch (error) {
+            console.warn(`Erro ao obter metadata para ${tableName}.${field.sourceField}`);
+          }
+        }
+
+        resultFields.push({
+          name: field.alias || field.sourceField,
+          type: field.type || 'unknown',
+          nullable: field.nullable !== undefined ? field.nullable : true
+        });
+      }
+      
+      return { fields: resultFields, rows: [] };
+    } catch (error) {
+      return { fields: [], rows: [] };
+    }
   }
 }
