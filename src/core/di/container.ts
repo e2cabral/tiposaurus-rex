@@ -1,0 +1,32 @@
+import { Container } from 'inversify';
+import 'reflect-metadata';
+
+import { DatabaseConnector } from '../domain/interfaces/database.interface';
+import { TemplateEngine } from '../domain/interfaces/template.interface';
+import { SQLParser } from '../domain/interfaces/sql.interface';
+
+import { MySQLConnector } from '@infra/adapters/mysql.adapter.js';
+import { HandlebarsTemplateEngine } from '@infra/templates/handlebars.template.js';
+import { SQLParserImpl } from '@utils/sql.parser.js';
+
+import { ConfigService } from '../services/config.service';
+import { CodeGeneratorService } from '../services/code-generator.service';
+
+import { UIService } from '@cli/ui/ui.service.js';
+import { GenerateCommand } from '@cli/commands/generate.command.js';
+import { InitCommand } from '@cli/commands/init.command.js';
+
+const container = new Container();
+
+container.bind<DatabaseConnector>('DatabaseConnector').to(MySQLConnector).inRequestScope();
+container.bind<TemplateEngine>('TemplateEngine').to(HandlebarsTemplateEngine).inSingletonScope();
+container.bind<SQLParser>('SQLParser').to(SQLParserImpl).inSingletonScope();
+
+container.bind<ConfigService>(ConfigService).toSelf().inSingletonScope();
+container.bind<CodeGeneratorService>(CodeGeneratorService).toSelf().inRequestScope();
+
+container.bind<UIService>(UIService).toSelf().inSingletonScope();
+container.bind<GenerateCommand>(GenerateCommand).toSelf().inRequestScope();
+container.bind<InitCommand>(InitCommand).toSelf().inRequestScope();
+
+export { container };
