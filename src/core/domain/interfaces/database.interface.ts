@@ -1,3 +1,5 @@
+import {ReturnField} from "@core/domain/interfaces/template.interface.js";
+
 export interface DatabaseConfig {
   host: string;
   user: string;
@@ -28,5 +30,6 @@ export interface DatabaseConnector {
   getConnection(): any;
   describeTable(tableName: string): Promise<TableMetadata>;
   analyzeQuery(query: string): Promise<QueryResult>;
+  analyzeQueryWithFields(query: string, fields: ReturnField[]): Promise<QueryResult>;
   execute<T>(query: string, params?: any[]): Promise<T[]>;
 }
