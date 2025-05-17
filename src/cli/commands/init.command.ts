@@ -1,10 +1,11 @@
 import { injectable, inject } from 'inversify';
 import inquirer from 'inquirer';
 import fs from 'fs/promises';
-import path from 'path';
 import { UIService } from '../ui/ui.service';
 import { ConfigService } from '@core/services/config.service';
 import { AppConfig } from '@core/domain/models/config.model';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
 @injectable()
 export class InitCommand {
@@ -108,7 +109,8 @@ export class InitCommand {
   }
 
   private async createDefaultTemplates(): Promise<void> {
-    const templatesFromPackage = path.join(__dirname, '../../../templates');
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const templatesFromPackage = path.join(__dirname, 'templates');
 
     const configPath = 'tiposaurus.config.json';
     let config: AppConfig;
