@@ -90,7 +90,6 @@ export class GenerateCommand {
             config.customTypes
           );
 
-          this.ui.success(`Tipos gerados em: ${outputPath}`);
           processedFiles++;
         } catch (error) {
           this.ui.error(`Erro ao processar arquivo ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
