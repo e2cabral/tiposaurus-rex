@@ -31,7 +31,7 @@ async function main(): Promise<void> {
       .description('Gera tipos TypeScript a partir de arquivos SQL')
       .requiredOption('-c, --config <path>', 'Caminho para o arquivo de configuração', 'tiposaurus.config.json')
       .option('-o, --output <dir>', 'Diretório de saída para os arquivos gerados')
-      .option('-t, --templates <dir>', 'Diretório com templates de geração', 'templates')
+      .option('-t, --templates <dir>', 'Diretório com templates de geração', '.templates')
       .action(async (options) => {
         try {
           const configService = container.get(ConfigService);

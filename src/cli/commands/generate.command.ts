@@ -43,7 +43,7 @@ export class GenerateCommand {
   }
 
   async processQueryDirectories(config: AppConfig, templatesDir?: string): Promise<void> {
-    const templateDir = templatesDir || path.join(process.cwd(), 'templates');
+    const templateDir = templatesDir || path.join(process.cwd(), '.templates');
 
     try {
       await fs.access(templateDir);
