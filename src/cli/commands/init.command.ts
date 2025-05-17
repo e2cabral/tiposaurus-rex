@@ -160,10 +160,6 @@ export async function {{camelCase query.name}}(
  * @timestamp {{timestamp}}
  */
 
-{{#each queries}}
-export * from './{{camelCase name}}';
-{{/each}}
-
 export const queryExecutors = {
 {{#each queries}}
   {{camelCase name}},
