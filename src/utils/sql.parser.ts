@@ -223,8 +223,7 @@ export class SQLParserImpl implements SQLParser {
     const tableAliasMap = new Map<string, string>();
 
     const patterns = [
-      /(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?:\s+|$|\n)/gi,
-      /(?:FROM|JOIN)\s+(\w+)\s+(\w)(?:\s+|$|\n)/gi
+      /\b(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s+|$|\n|WHERE|JOIN|ON|ORDER|GROUP|HAVING|LIMIT)/gi
     ];
 
     for (const pattern of patterns) {
