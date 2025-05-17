@@ -1,82 +1,173 @@
 import { injectable } from 'inversify';
 import { SQLParser, SQLParserOptions } from '../core/domain/interfaces/sql.interface';
-import {QueryDefinition, QueryParameter, ReturnField} from '../core/domain/interfaces/template.interface';
+import { QueryDefinition, QueryParameter, ReturnField } from '../core/domain/interfaces/template.interface';
 
 @injectable()
 export class SQLParserImpl implements SQLParser {
-  private readonly QUERY_PATTERN = /--\s*@name\s+([\w.]+)\s*(?:--\s*@param\s+[\w:]+\s*)*(?:--\s*@returnType\s+([\w\[\]<>]+))?\s*(?:--\s*@returnSingle\s+(true|false))?\s*([\s\S]+?)(?=--\s*@name|$)/g;
-  private readonly PARAM_PATTERN = /--\s*@param\s+([\w:]+)/g;
-  private readonly DESCRIPTION_PATTERN = /--\s*@description\s+(.+?)(?=\n--\s*@|\n\n|$)/;
-  private readonly RETURN_SINGLE_PATTERN = /--\s*@returnSingle\s+(true|false)/;
-  private readonly RETURN_FIELD_PATTERN = /--\s*@return\s+([\w.]+)(?:\s+as\s+([\w]+))?(?:\s*:\s*([\w\[\]<>]+))?/g;
-
   constructor(private options: SQLParserOptions = {}) {
     this.options = {
       commentPrefix: '--',
-      paramPattern: /--\s*@param\s+([\w:]+)/g,
       ...options
     };
   }
 
   parseFile(content: string): QueryDefinition[] {
+    console.log("Analisando conteúdo SQL:");
+    console.log(content.substring(0, 200) + "...");
+    
     const queries: QueryDefinition[] = [];
-    let match: RegExpExecArray | null;
 
-    this.QUERY_PATTERN.lastIndex = 0;
+    const nameRegex = /--\s*@name(?:\s*:)?\s+([^\r\n]+)/g;
+    let nameMatch;
+    let lastIndex = 0;
+    let blocks = [];
 
-    while ((match = this.QUERY_PATTERN.exec(content)) !== null) {
-      const [fullMatch, name, returnType, returnSingleStr, sql] = match;
-
-      const descMatch = fullMatch.match(this.DESCRIPTION_PATTERN);
-      const description = descMatch ? descMatch[1].trim() : undefined;
-
-      const paramMatches = Array.from(fullMatch.matchAll(this.PARAM_PATTERN));
-      const params: QueryParameter[] = paramMatches.map(paramMatch => {
-        const [paramName, paramType] = paramMatch[1].split(':');
-        return {
-          name: paramName,
-          type: paramType || 'any'
-        };
-      });
-
-      const returnFieldMatches = Array.from(fullMatch.matchAll(this.RETURN_FIELD_PATTERN));
-      const returnFields: ReturnField[] = returnFieldMatches.map(fieldMatch => {
-        const [sourceField, alias, type] = [fieldMatch[1], fieldMatch[2], fieldMatch[3]];
-
-        const parts = sourceField.split('.');
-        let sourceTable: string | undefined;
-        let actualField = sourceField;
-        
-        if (parts.length > 1) {
-          sourceTable = parts[0];
-          actualField = parts[1];
-        }
-        
-        return {
-          sourceField: actualField,
-          sourceTable,
-          alias: alias || actualField,
-          type: type
-        };
-      });
-
-      let returnSingleMatch = fullMatch.match(this.RETURN_SINGLE_PATTERN);
-      const returnSingle = returnSingleMatch 
-        ? returnSingleMatch[1] === 'true'
-        : (returnSingleStr === 'true' || (returnType && !returnType.endsWith('[]')));
-
-      queries.push({
-        name,
-        description,
-        sql: sql.trim(),
-        params,
-        returnType: returnType || 'any',
-        returnSingle: !!returnSingle,
-        returnFields: returnFields.length > 0 ? returnFields : undefined
+    while ((nameMatch = nameRegex.exec(content)) !== null) {
+      blocks.push({
+        name: nameMatch[1].trim(),
+        startIndex: nameMatch.index
       });
     }
 
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      const nextBlock = blocks[i + 1];
+      const blockContent = nextBlock 
+        ? content.substring(block.startIndex, nextBlock.startIndex) 
+        : content.substring(block.startIndex);
+
+      const queryDef = this.parseQueryBlock(block.name, blockContent);
+      if (queryDef) {
+        queries.push(queryDef);
+      }
+    }
+    
+    console.log(`Total de consultas encontradas: ${queries.length}`);
     return queries;
+  }
+  
+  private parseQueryBlock(name: string, blockContent: string): QueryDefinition | null {
+    console.log(`Processando bloco para consulta: ${name}`);
+
+    const lines = blockContent.split('\n');
+    
+    let description = '';
+    let returnType = 'any';
+    let returnSingle = true;
+    const params: QueryParameter[] = [];
+    const returnFields: ReturnField[] = [];
+    const sqlLines: string[] = [];
+    
+    let foundSql = false;
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (!line) continue;
+
+      if (!line.startsWith('--')) {
+        foundSql = true;
+        sqlLines.push(lines[i]);
+        continue;
+      }
+      
+
+      if (foundSql) {
+        if (line.match(/--\s*@name(?:\s*:)?/)) {
+          break;
+        }
+      }
+
+      if (line.match(/--\s*@description(?:\s*:)?/)) {
+        description = line.replace(/--\s*@description(?:\s*:)?\s*/, '').trim();
+        console.log(`Descrição: ${description}`);
+      }
+      else if (line.match(/--\s*@param(?:\s*:)?/)) {
+        const paramPart = line.replace(/--\s*@param(?:\s*:)?\s*/, '').trim();
+        const [paramName, paramType] = paramPart.split(':');
+        params.push({
+          name: paramName.trim(),
+          type: paramType ? paramType.trim() : 'any'
+        });
+        console.log(`Parâmetro: ${paramName.trim()}:${paramType ? paramType.trim() : 'any'}`);
+      }
+      else if (line.match(/--\s*@returnType(?:\s*:)?/)) {
+        returnType = line.replace(/--\s*@returnType(?:\s*:)?\s*/, '').trim();
+        console.log(`Tipo de retorno: ${returnType}`);
+      }
+      else if (line.match(/--\s*@returnSingle(?:\s*:)?/)) {
+        const value = line.replace(/--\s*@returnSingle(?:\s*:)?\s*/, '').trim();
+        returnSingle = value.toLowerCase() === 'true';
+        console.log(`Retorno único: ${returnSingle}`);
+      }
+      else if (line.match(/--\s*@return(?:\s*:)?/)) {
+        const fieldInfo = line.replace(/--\s*@return(?:\s*:)?\s*/, '').trim();
+        console.log(`Campo de retorno: ${fieldInfo}`);
+
+        this.parseReturnField(fieldInfo, returnFields);
+      }
+    }
+    
+    if (sqlLines.length === 0) {
+      console.log(`Nenhum SQL encontrado para a consulta ${name}`);
+      return null;
+    }
+    
+    const sql = sqlLines.join('\n');
+    console.log(`SQL encontrado com ${sqlLines.length} linhas`);
+    
+    return {
+      name,
+      description,
+      sql,
+      params,
+      returnType,
+      returnSingle,
+      returnFields: returnFields.length > 0 ? returnFields : undefined
+    };
+  }
+  
+  private parseReturnField(fieldInfo: string, returnFields: ReturnField[]): void {
+    
+    console.log(`Processando campo: ${fieldInfo}`);
+
+    const typeParts = fieldInfo.split(':');
+    let mainPart = typeParts[0].trim();
+    let type = typeParts.length > 1 ? typeParts[1].trim() : undefined;
+
+    const aliasParts = mainPart.split(' as ');
+    let fieldPart = aliasParts[0].trim();
+    let alias = aliasParts.length > 1 ? aliasParts[1].trim() : undefined;
+
+    const fieldParts = fieldPart.split('.');
+    let sourceTable: string | undefined;
+    let sourceField: string;
+    
+    if (fieldParts.length > 1) {
+      sourceTable = fieldParts[0];
+      sourceField = fieldParts[1];
+    } else {
+      sourceField = fieldPart;
+    }
+
+    if (!type) {
+      if (sourceField === 'id' || sourceField.endsWith('_id') || sourceField.includes('Id')) {
+        type = 'number';
+      } else if (sourceField.includes('date') || sourceField.includes('time') || sourceField.includes('Date')) {
+        type = 'Date';
+      } else if (sourceField.includes('is_') || sourceField.includes('has_')) {
+        type = 'boolean';
+      }
+    }
+    
+    console.log(`Campo processado: campo=${sourceField}, tabela=${sourceTable}, alias=${alias}, tipo=${type}`);
+    
+    returnFields.push({
+      sourceField,
+      sourceTable,
+      alias: alias || sourceField,
+      type
+    });
   }
 
   parseQuery(sql: string, metadata: Record<string, string> = {}): QueryDefinition | null {
@@ -101,41 +192,45 @@ export class SQLParserImpl implements SQLParser {
   extractTableNames(sql: string): string[] {
     const tableNames = new Set<string>();
 
-    const fromPattern = /FROM\s+(\w+)/gi;
-    let fromMatch;
-    while ((fromMatch = fromPattern.exec(sql)) !== null) {
-      const tableName = fromMatch[1].trim();
-      tableNames.add(tableName);
-    }
+    const patterns = [
+      /FROM\s+(\w+)/gi,
+      /JOIN\s+(\w+)/gi,
+      /INSERT\s+INTO\s+(\w+)/gi,
+      /UPDATE\s+(\w+)/gi,
+      /DELETE\s+FROM\s+(\w+)/gi
+    ];
 
-    const joinPattern = /JOIN\s+(\w+)/gi;
-    let joinMatch;
-    while ((joinMatch = joinPattern.exec(sql)) !== null) {
-      const tableName = joinMatch[1].trim();
-      tableNames.add(tableName);
-    }
-
-    const insertPattern = /INSERT\s+INTO\s+(\w+)/gi;
-    let insertMatch;
-    while ((insertMatch = insertPattern.exec(sql)) !== null) {
-      const tableName = insertMatch[1].trim();
-      tableNames.add(tableName);
-    }
-
-    const updatePattern = /UPDATE\s+(\w+)/gi;
-    let updateMatch;
-    while ((updateMatch = updatePattern.exec(sql)) !== null) {
-      const tableName = updateMatch[1].trim();
-      tableNames.add(tableName);
-    }
-
-    const deletePattern = /DELETE\s+FROM\s+(\w+)/gi;
-    let deleteMatch;
-    while ((deleteMatch = deletePattern.exec(sql)) !== null) {
-      const tableName = deleteMatch[1].trim();
-      tableNames.add(tableName);
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(sql)) !== null) {
+        const tableName = match[1].trim();
+        tableNames.add(tableName);
+      }
     }
 
     return Array.from(tableNames);
+  }
+
+  extractTableAliases(sql: string): Map<string, string> {
+    const tableAliasMap = new Map<string, string>();
+
+    const patterns = [
+      /(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?:\s+|$|\n)/gi,
+      /(?:FROM|JOIN)\s+(\w+)\s+(\w)(?:\s+|$|\n)/gi
+    ];
+
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(sql)) !== null) {
+        const tableName = match[1].trim();
+        const alias = match[2]?.trim();
+        
+        if (tableName && alias && tableName !== alias && !tableAliasMap.has(alias)) {
+          tableAliasMap.set(alias, tableName);
+        }
+      }
+    }
+    
+    return tableAliasMap;
   }
 }
