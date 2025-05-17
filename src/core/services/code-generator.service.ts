@@ -1,4 +1,4 @@
-import { injectable, inject } from 'inversify';
+import {injectable, inject} from 'inversify';
 import fs from 'fs/promises';
 import path from 'path';
 import prettier from 'prettier';
@@ -7,6 +7,7 @@ import {DatabaseConnector, TableMetadata} from "../domain/interfaces/database.in
 import {SQLParser} from "../domain/interfaces/sql.interface.js";
 import {UIService} from "../../cli/ui/ui.service.js";
 import {QueryAnalyzerService} from "./query-analyzer.service.js";
+import {SQLFormatter} from "../../utils/sql-formatter.js";
 
 @injectable()
 export class CodeGeneratorService {
@@ -35,9 +36,11 @@ export class CodeGeneratorService {
     @inject('DatabaseConnector') private dbConnector: DatabaseConnector,
     @inject('SQLParser') private sqlParser: SQLParser,
     @inject(UIService) private ui: UIService,
-    @inject(QueryAnalyzerService) private queryAnalyzer: QueryAnalyzerService
-  ) {}
-  
+    @inject(QueryAnalyzerService) private queryAnalyzer: QueryAnalyzerService,
+    @inject(SQLFormatter) private sqlFormatter: SQLFormatter
+  ) {
+  }
+
   async generateTypesForQueries(
     queries: QueryDefinition[],
     outputPath: string,
@@ -48,7 +51,7 @@ export class CodeGeneratorService {
       this.ui.startSpinner(`Gerando tipos para ${queries.length} consultas...`);
 
       if (customTypes) {
-        this.typeMap = { ...this.typeMap, ...customTypes };
+        this.typeMap = {...this.typeMap, ...customTypes};
       }
 
       const timestamp = new Date().toISOString();
@@ -81,23 +84,28 @@ export class CodeGeneratorService {
 
       this.ui.updateSpinner(`Gerando código para ${queries.length} consultas e ${tableMetadata.length} tabelas...`);
 
+      const formattedQueries = queries.map(query => ({
+        ...query,
+        sql: this.sqlFormatter.processQueryForTypeScript(query.sql)
+      }));
+
       const enrichedQueries: QueryDefinition[] = [];
       const customInterfaces: string[] = [];
-      
-      for (const query of queries) {
+
+      for (const query of formattedQueries) {
         this.ui.updateSpinner(`Processando consulta ${query.name}...`);
-        
+
         try {
           if (query.returnFields && query.returnFields.length > 0) {
             const interfaceName = query.returnType.replace(/\[\]/g, '');
             const interfaceContent = this.generateCustomInterface(interfaceName, query.returnFields);
-            
+
             console.log(`Interface gerada para ${interfaceName}:`, interfaceContent);
 
             if (!customInterfaces.includes(interfaceContent)) {
               customInterfaces.push(interfaceContent);
             }
-            
+
             enrichedQueries.push(query);
           } else {
             enrichedQueries.push(query);
@@ -208,7 +216,7 @@ export class CodeGeneratorService {
         printWidth: 100
       });
 
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      await fs.mkdir(path.dirname(outputPath), {recursive: true});
       await fs.writeFile(outputPath, formattedCode);
 
       this.ui.stopSpinner(true, `Tipos gerados em ${outputPath}`);
@@ -229,22 +237,22 @@ export class CodeGeneratorService {
     const baseType = dbType.toLowerCase().replace(/\(\d+\)/, '');
     return this.typeMap[baseType] || this.typeMap[dbType] || 'any';
   }
-  
+
   private generateCustomInterface(interfaceName: string, fields: any[]): string {
     const fieldDefinitions = fields.map(field => {
       const fieldName = field.alias || field.sourceField;
       const fieldType = field.type || 'any';
       const nullable = field.nullable ? '?' : '';
-      
+
       return `  ${fieldName}${nullable}: ${fieldType};`;
     }).join('\n');
-    
+
     return `export interface ${interfaceName} {\n${fieldDefinitions}\n}`;
   }
 
   async generateDatabaseConnectionFile(
     outputDir: string,
-    templateDir: string, 
+    templateDir: string,
     timestamp: string
   ): Promise<void> {
     try {
@@ -257,7 +265,7 @@ export class CodeGeneratorService {
         return;
       } catch (error) {
         this.ui.info('Gerando arquivo de conexão com o banco de dados...');
-        await fs.mkdir(connectionDir, { recursive: true });
+        await fs.mkdir(connectionDir, {recursive: true});
       }
 
       let templateContent;
@@ -266,14 +274,14 @@ export class CodeGeneratorService {
         await fs.access(dbConnectionTemplatePath);
         templateContent = await this.templateEngine.renderFromFile(
           dbConnectionTemplatePath,
-          { timestamp }
+          {timestamp}
         );
       } catch (error) {
         this.ui.warning('Template db-connection.hbs não encontrado, usando template padrão');
-        const { dbConnectionTemplate } = await import('../../templates/index.template.js');
+        const {dbConnectionTemplate} = await import('../../templates/index.template.js');
         templateContent = await this.templateEngine.renderFromString(
           dbConnectionTemplate,
-          { timestamp }
+          {timestamp}
         );
       }
 
@@ -286,7 +294,7 @@ export class CodeGeneratorService {
 
       await fs.writeFile(connectionFilePath, formattedCode);
       this.ui.success(`Arquivo de conexão gerado em ${connectionFilePath}`);
-      
+
       return;
     } catch (error) {
       this.ui.warning(`Erro ao gerar arquivo de conexão: ${error instanceof Error ? error.message : String(error)}`);

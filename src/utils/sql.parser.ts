@@ -1,10 +1,14 @@
-import { injectable } from 'inversify';
-import { SQLParser, SQLParserOptions } from '../core/domain/interfaces/sql.interface.js';
-import { QueryDefinition, QueryParameter, ReturnField } from '../core/domain/interfaces/template.interface.js';
+import {injectable, inject} from 'inversify';
+import {SQLParser, SQLParserOptions} from '../core/domain/interfaces/sql.interface.js';
+import {QueryDefinition, QueryParameter, ReturnField} from '../core/domain/interfaces/template.interface.js';
+import {SQLFormatter} from './sql-formatter.js';
 
 @injectable()
 export class SQLParserImpl implements SQLParser {
-  constructor(private options: SQLParserOptions = {}) {
+  constructor(
+    @inject(SQLFormatter) private sqlFormatter: SQLFormatter,
+    private options: SQLParserOptions = {}
+  ) {
     this.options = {
       commentPrefix: '--',
       ...options
@@ -14,7 +18,7 @@ export class SQLParserImpl implements SQLParser {
   parseFile(content: string): QueryDefinition[] {
     console.log("Analisando conteúdo SQL:");
     console.log(content.substring(0, 200) + "...");
-    
+
     const queries: QueryDefinition[] = [];
 
     const nameRegex = /--\s*@name(?:\s*:)?\s+([^\r\n]+)/g;
@@ -32,8 +36,8 @@ export class SQLParserImpl implements SQLParser {
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
       const nextBlock = blocks[i + 1];
-      const blockContent = nextBlock 
-        ? content.substring(block.startIndex, nextBlock.startIndex) 
+      const blockContent = nextBlock
+        ? content.substring(block.startIndex, nextBlock.startIndex)
         : content.substring(block.startIndex);
 
       const queryDef = this.parseQueryBlock(block.name, blockContent);
@@ -41,25 +45,25 @@ export class SQLParserImpl implements SQLParser {
         queries.push(queryDef);
       }
     }
-    
+
     console.log(`Total de consultas encontradas: ${queries.length}`);
     return queries;
   }
-  
+
   private parseQueryBlock(name: string, blockContent: string): QueryDefinition | null {
     console.log(`Processando bloco para consulta: ${name}`);
 
     const lines = blockContent.split('\n');
-    
+
     let description = '';
     let returnType = 'any';
     let returnSingle = true;
     const params: QueryParameter[] = [];
     const returnFields: ReturnField[] = [];
     const sqlLines: string[] = [];
-    
+
     let foundSql = false;
-    
+
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
 
@@ -70,7 +74,7 @@ export class SQLParserImpl implements SQLParser {
         sqlLines.push(lines[i]);
         continue;
       }
-      
+
 
       if (foundSql) {
         if (line.match(/--\s*@name(?:\s*:)?/)) {
@@ -81,8 +85,7 @@ export class SQLParserImpl implements SQLParser {
       if (line.match(/--\s*@description(?:\s*:)?/)) {
         description = line.replace(/--\s*@description(?:\s*:)?\s*/, '').trim();
         console.log(`Descrição: ${description}`);
-      }
-      else if (line.match(/--\s*@param(?:\s*:)?/)) {
+      } else if (line.match(/--\s*@param(?:\s*:)?/)) {
         const paramPart = line.replace(/--\s*@param(?:\s*:)?\s*/, '').trim();
         const [paramName, paramType] = paramPart.split(':');
         params.push({
@@ -90,45 +93,48 @@ export class SQLParserImpl implements SQLParser {
           type: paramType ? paramType.trim() : 'any'
         });
         console.log(`Parâmetro: ${paramName.trim()}:${paramType ? paramType.trim() : 'any'}`);
-      }
-      else if (line.match(/--\s*@returnType(?:\s*:)?/)) {
+      } else if (line.match(/--\s*@returnType(?:\s*:)?/)) {
         returnType = line.replace(/--\s*@returnType(?:\s*:)?\s*/, '').trim();
         console.log(`Tipo de retorno: ${returnType}`);
-      }
-      else if (line.match(/--\s*@returnSingle(?:\s*:)?/)) {
+      } else if (line.match(/--\s*@returnSingle(?:\s*:)?/)) {
         const value = line.replace(/--\s*@returnSingle(?:\s*:)?\s*/, '').trim();
         returnSingle = value.toLowerCase() === 'true';
         console.log(`Retorno único: ${returnSingle}`);
-      }
-      else if (line.match(/--\s*@return(?:\s*:)?/)) {
+      } else if (line.match(/--\s*@return(?:\s*:)?/)) {
         const fieldInfo = line.replace(/--\s*@return(?:\s*:)?\s*/, '').trim();
         console.log(`Campo de retorno: ${fieldInfo}`);
 
         this.parseReturnField(fieldInfo, returnFields);
       }
     }
-    
+
     if (sqlLines.length === 0) {
       console.log(`Nenhum SQL encontrado para a consulta ${name}`);
       return null;
     }
-    
+
     const sql = sqlLines.join('\n');
-    console.log(`SQL encontrado com ${sqlLines.length} linhas`);
-    
+
+    let formattedSql = sql;
+    if (returnFields.length > 0) {
+      formattedSql = this.sqlFormatter.applyReturnFieldAliases(sql, returnFields);
+    } else {
+      formattedSql = this.sqlFormatter.processQueryForTypeScript(sql);
+    }
+
     return {
       name,
       description,
-      sql,
+      sql: formattedSql,
       params,
       returnType,
       returnSingle,
       returnFields: returnFields.length > 0 ? returnFields : undefined
     };
   }
-  
+
   private parseReturnField(fieldInfo: string, returnFields: ReturnField[]): void {
-    
+
     console.log(`Processando campo: ${fieldInfo}`);
 
     const typeParts = fieldInfo.split(':');
@@ -142,7 +148,7 @@ export class SQLParserImpl implements SQLParser {
     const fieldParts = fieldPart.split('.');
     let sourceTable: string | undefined;
     let sourceField: string;
-    
+
     if (fieldParts.length > 1) {
       sourceTable = fieldParts[0];
       sourceField = fieldParts[1];
@@ -159,9 +165,9 @@ export class SQLParserImpl implements SQLParser {
         type = 'boolean';
       }
     }
-    
+
     console.log(`Campo processado: campo=${sourceField}, tabela=${sourceTable}, alias=${alias}, tipo=${type}`);
-    
+
     returnFields.push({
       sourceField,
       sourceTable,
@@ -174,15 +180,17 @@ export class SQLParserImpl implements SQLParser {
     const name = metadata.name;
     if (!name) return null;
 
+    const formattedSql = this.sqlFormatter.processQueryForTypeScript(sql);
+
     return {
       name,
       description: metadata.description,
-      sql,
+      sql: formattedSql,
       params: (metadata.params || '').split(',')
         .filter(Boolean)
         .map(param => {
           const [name, type] = param.trim().split(':');
-          return { name, type: type || 'any' };
+          return {name, type: type || 'any'};
         }),
       returnType: metadata.returns || 'any',
       returnSingle: metadata.returns ? !metadata.returns.endsWith('[]') : true
@@ -224,13 +232,13 @@ export class SQLParserImpl implements SQLParser {
       while ((match = pattern.exec(sql)) !== null) {
         const tableName = match[1].trim();
         const alias = match[2]?.trim();
-        
+
         if (tableName && alias && tableName !== alias && !tableAliasMap.has(alias)) {
           tableAliasMap.set(alias, tableName);
         }
       }
     }
-    
+
     return tableAliasMap;
   }
 }
