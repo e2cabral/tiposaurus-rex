@@ -16,7 +16,6 @@ export const queryTemplate = `/**
  * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
  * @timestamp {{timestamp}}
  */
-import { getConnection } from './connection/db-connection';
 
 export interface {{pascalCase query.name}}Params {
 {{#each query.params}}
@@ -29,24 +28,12 @@ export type {{pascalCase query.name}}Result = {{#if query.returnSingle}}{{query.
 export const {{camelCase query.name}}Query = \`{{{query.sql}}}\`;
 
 /**
- * Executa a consulta {{query.name}} com a conexão automática
- * @param params Parâmetros da consulta
- * @returns Resultado da consulta
- */
-export async function {{camelCase query.name}}(
-  params: {{pascalCase query.name}}Params
-): Promise<{{pascalCase query.name}}Result{{#unless query.returnSingle}}[]{{/unless}}> {
-  const db = await getConnection();
-  return db.execute<{{pascalCase query.name}}Result>({{camelCase query.name}}Query, Object.values(params));
-}
-
-/**
- * Executa a consulta {{query.name}} com uma conexão fornecida
+ * Executa a consulta {{query.name}}
  * @param db Conexão com o banco de dados
  * @param params Parâmetros da consulta
  * @returns Resultado da consulta
  */
-export async function {{camelCase query.name}}WithDb(
+export async function {{camelCase query.name}}(
   db: any,
   params: {{pascalCase query.name}}Params
 ): Promise<{{pascalCase query.name}}Result{{#unless query.returnSingle}}[]{{/unless}}> {
