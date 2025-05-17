@@ -16,13 +16,6 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "@core/*": ["core/*"],
-      "@cli/*": ["cli/*"],
-      "@infra/*": ["infra/*"],
-      "@utils/*": ["utils/*"],
-      "@config/*": ["config/*"]
-    }
   },
   "include": [
     "src/**/*",
