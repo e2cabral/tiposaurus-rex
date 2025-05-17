@@ -1,7 +1,12 @@
-export interface Field {
+export interface QueryDefinition {
   name: string;
-  type: string;
-  nullable: boolean;
+  description?: string;
+  sql: string;
+  params: QueryParameter[];
+  returnType: string;
+  returnSingle: boolean;
+  returnFields?: ReturnField[];
+  customTypes?: string[];
 }
 
 export interface QueryParameter {
@@ -17,30 +22,16 @@ export interface ReturnField {
   nullable?: boolean;
 }
 
-export interface QueryDefinition {
-  name: string;
-  description?: string;
-  sql: string;
-  params: QueryParameter[];
-  returnType: string;
-  returnSingle: boolean;
-  returnFields?: ReturnField[];
-}
-
 export interface TemplateContext {
-  tableName?: string;
-  interfaceName?: string;
-  fields?: Field[];
-  query?: QueryDefinition;
-  queries?: QueryDefinition[];
-  timestamp?: string;
-  author?: string;
+  timestamp: string;
+  tables?: any[];
+  queries?: any[];
+  query?: any;
   inSingleFile?: boolean;
+  customInterfaces?: string[];
 }
 
 export interface TemplateEngine {
-  registerPartial(name: string, template: string): void;
-  registerHelper(name: string, fn: Function): void;
-  compile(template: string, context: TemplateContext): string;
-  renderFromFile(templatePath: string, context: TemplateContext): Promise<string>;
+  renderFromFile(templatePath: string, context: any): Promise<string>;
+  renderFromString(template: string, context: any): Promise<string>;
 }
