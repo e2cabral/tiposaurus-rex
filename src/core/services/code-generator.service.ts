@@ -2,10 +2,11 @@ import { injectable, inject } from 'inversify';
 import fs from 'fs/promises';
 import path from 'path';
 import prettier from 'prettier';
-import { TemplateEngine, TemplateContext, QueryDefinition } from '@core/domain/interfaces/template.interface.js';
-import { DatabaseConnector, TableMetadata } from '@core/domain/interfaces/database.interface.js';
-import { UIService } from '../../cli/ui/ui.service';
-import { SQLParser } from '@core/domain/interfaces/sql.interface.js';
+import { TemplateEngine, TemplateContext, QueryDefinition } from '@core/domain/interfaces/template.interface';
+import { DatabaseConnector, TableMetadata } from '@core/domain/interfaces/database.interface';
+import { UIService } from '@cli/ui/ui.service';
+import { SQLParser } from '@core/domain/interfaces/sql.interface';
+import { QueryAnalyzerService } from '@core/services/query-analyzer.service';
 
 @injectable()
 export class CodeGeneratorService {
@@ -33,12 +34,13 @@ export class CodeGeneratorService {
     @inject('TemplateEngine') private templateEngine: TemplateEngine,
     @inject('DatabaseConnector') private dbConnector: DatabaseConnector,
     @inject('SQLParser') private sqlParser: SQLParser,
-    @inject(UIService) private ui: UIService
+    @inject(UIService) private ui: UIService,
+    @inject(QueryAnalyzerService) private queryAnalyzer: QueryAnalyzerService
   ) {}
-
+  
   async generateTypesForQueries(
     queries: QueryDefinition[],
-    outputFile: string,
+    outputPath: string,
     templateDir: string,
     customTypes?: Record<string, string>
   ): Promise<void> {
@@ -73,7 +75,34 @@ export class CodeGeneratorService {
 
       const timestamp = new Date().toISOString();
 
-      const unifiedContext = {
+      const enrichedQueries: QueryDefinition[] = [];
+      const customInterfaces: string[] = [];
+      
+      for (const query of queries) {
+        this.ui.updateSpinner(`Processando consulta ${query.name}...`);
+        
+        try {
+          if (query.returnFields && query.returnFields.length > 0) {
+            const interfaceName = query.returnType.replace(/\[\]/g, '');
+            const interfaceContent = this.generateCustomInterface(interfaceName, query.returnFields);
+            
+            console.log(`Interface gerada para ${interfaceName}:`, interfaceContent);
+
+            if (!customInterfaces.includes(interfaceContent)) {
+              customInterfaces.push(interfaceContent);
+            }
+            
+            enrichedQueries.push(query);
+          } else {
+            enrichedQueries.push(query);
+          }
+        } catch (error) {
+          this.ui.warning(`Erro ao processar consulta ${query.name}: ${error instanceof Error ? error.message : String(error)}`);
+          enrichedQueries.push(query);
+        }
+      }
+
+      const context = {
         timestamp,
         tables: tableMetadata.map(metadata => ({
           tableName: metadata.name,
@@ -84,15 +113,23 @@ export class CodeGeneratorService {
             nullable: col.nullable
           }))
         })),
-        queries: queries.map(query => ({
+        queries: enrichedQueries.map(query => ({
           name: query.name,
           description: query.description,
           sql: query.sql,
           params: query.params,
           returnType: query.returnType,
-          returnSingle: query.returnSingle
-        }))
+          returnSingle: query.returnSingle,
+          returnFields: query.returnFields
+        })),
+        customInterfaces: customInterfaces.length > 0 ? customInterfaces : undefined
       };
+
+      console.log('Contexto para renderização:', JSON.stringify({
+        tablesCount: context.tables.length,
+        queriesCount: context.queries.length,
+        customInterfacesCount: context.customInterfaces?.length || 0
+      }));
 
       let generatedCode: string;
       try {
@@ -102,13 +139,13 @@ export class CodeGeneratorService {
         this.ui.updateSpinner('Usando template unificado...');
         generatedCode = await this.templateEngine.renderFromFile(
           unifiedTemplatePath,
-          unifiedContext
+          context
         );
       } catch (error) {
         this.ui.updateSpinner('Template unificado não encontrado, gerando código em partes...');
         let contentParts = [];
 
-        for (const table of unifiedContext.tables) {
+        for (const table of context.tables) {
           const rendered = await this.templateEngine.renderFromFile(
             path.join(templateDir, 'interface.hbs'),
             {
@@ -121,8 +158,13 @@ export class CodeGeneratorService {
           contentParts.push(rendered);
         }
 
-        for (const query of unifiedContext.queries) {
-          const context: TemplateContext = {
+        if (customInterfaces.length > 0) {
+          contentParts.push('/**\n * Interfaces personalizadas\n * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR\n * @timestamp ' + timestamp + '\n */');
+          contentParts.push(...customInterfaces);
+        }
+
+        for (const query of context.queries) {
+          const queryContext: TemplateContext = {
             query: {
               ...query,
               sql: query.sql
@@ -132,13 +174,13 @@ export class CodeGeneratorService {
 
           const rendered = await this.templateEngine.renderFromFile(
             path.join(templateDir, 'query.hbs'),
-            context
+            queryContext
           );
           contentParts.push(rendered);
         }
 
         const modifiedIndexContext: TemplateContext = {
-          queries: unifiedContext.queries,
+          queries: context.queries,
           inSingleFile: true,
           timestamp
         };
@@ -160,10 +202,10 @@ export class CodeGeneratorService {
         printWidth: 100
       });
 
-      await fs.mkdir(path.dirname(outputFile), { recursive: true });
-      await fs.writeFile(outputFile, formattedCode);
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      await fs.writeFile(outputPath, formattedCode);
 
-      this.ui.stopSpinner(true, `Tipos gerados em ${outputFile}`);
+      this.ui.stopSpinner(true, `Tipos gerados em ${outputPath}`);
     } catch (error) {
       this.ui.stopSpinner(false, `Erro ao gerar tipos: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
@@ -180,5 +222,17 @@ export class CodeGeneratorService {
   private mapDBTypeToTS(dbType: string): string {
     const baseType = dbType.toLowerCase().replace(/\(\d+\)/, '');
     return this.typeMap[baseType] || this.typeMap[dbType] || 'any';
+  }
+  
+  private generateCustomInterface(interfaceName: string, fields: any[]): string {
+    const fieldDefinitions = fields.map(field => {
+      const fieldName = field.alias || field.sourceField;
+      const fieldType = field.type || 'any';
+      const nullable = field.nullable ? '?' : '';
+      
+      return `  ${fieldName}${nullable}: ${fieldType};`;
+    }).join('\n');
+    
+    return `export interface ${interfaceName} {\n${fieldDefinitions}\n}`;
   }
 }
