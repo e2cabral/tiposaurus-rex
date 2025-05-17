@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
-import { SQLParser, SQLParserOptions } from '../core/domain/interfaces/sql.interface';
-import { QueryDefinition, QueryParameter, ReturnField } from '../core/domain/interfaces/template.interface';
+import { SQLParser, SQLParserOptions } from '../core/domain/interfaces/sql.interface.js';
+import { QueryDefinition, QueryParameter, ReturnField } from '../core/domain/interfaces/template.interface.js';
 
 @injectable()
 export class SQLParserImpl implements SQLParser {
