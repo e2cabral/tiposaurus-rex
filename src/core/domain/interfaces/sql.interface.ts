@@ -1,4 +1,4 @@
-import { QueryDefinition, QueryParameter } from './template.interface.js';
+import { QueryDefinition, QueryParameter, ReturnField } from './template.interface.ts';
 
 export interface SQLParserOptions {
   commentPrefix?: string;
@@ -9,4 +9,5 @@ export interface SQLParser {
   parseFile(content: string): QueryDefinition[];
   parseQuery(sql: string, metadata?: Record<string, string>): QueryDefinition | null;
   extractTableNames(sql: string): string[];
+  extractTableAliases(sql: string): Map<string, string>;
 }
