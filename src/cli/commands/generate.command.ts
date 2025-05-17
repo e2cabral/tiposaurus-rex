@@ -2,18 +2,12 @@ import { injectable, inject } from 'inversify';
 import path from 'path';
 import fs from 'fs/promises';
 import * as glob from 'glob';
-import { UIService } from '../ui/ui.service';
-import { ConfigService } from '@core/services/config.service.js';
-import { CodeGeneratorService } from '@core/services/code-generator.service.js';
-import { DatabaseConnector } from '@core/domain/interfaces/database.interface.js';
-import { SQLParser } from '@core/domain/interfaces/sql.interface.js';
-import { AppConfig } from '@core/domain/models/config.model.js';
-
-export interface GenerateCommandOptions {
-  config: string;
-  output?: string;
-  templates?: string;
-}
+import { UIService } from '@cli/ui/ui.service';
+import { ConfigService } from '@core/services/config.service';
+import { CodeGeneratorService } from '@core/services/code-generator.service';
+import { DatabaseConnector } from '@core/domain/interfaces/database.interface';
+import { SQLParser } from '@core/domain/interfaces/sql.interface';
+import { AppConfig } from '@core/domain/models/config.model';
 
 @injectable()
 export class GenerateCommand {
@@ -25,13 +19,12 @@ export class GenerateCommand {
     @inject('SQLParser') private sqlParser: SQLParser
   ) {}
 
-  async execute(options: GenerateCommandOptions): Promise<void> {
+  async execute(options: any): Promise<void> {
     try {
       this.ui.showBanner();
       this.ui.info(`Carregando configuração de ${options.config}...`);
 
       const config = await this.configService.loadConfig(options.config);
-
       if (options.output) {
         config.outputDir = options.output;
       }
@@ -49,15 +42,12 @@ export class GenerateCommand {
     }
   }
 
-  private async processQueryDirectories(
-    config: AppConfig,
-    templatesDir?: string
-  ): Promise<void> {
+  async processQueryDirectories(config: AppConfig, templatesDir?: string): Promise<void> {
     const templateDir = templatesDir || path.join(process.cwd(), 'templates');
 
     try {
       await fs.access(templateDir);
-    } catch (error) {
+    } catch {
       this.ui.error(`Diretório de templates não encontrado: ${templateDir}`);
       this.ui.info('Você pode especificar um diretório de templates usando a opção --templates');
       process.exit(1);
@@ -66,40 +56,44 @@ export class GenerateCommand {
     let totalFiles = 0;
     let processedFiles = 0;
 
-    for (const queryDir of config.queryDirs) {
-      const sqlFiles = glob.sync(path.join(queryDir, '**/*.sql'));
-      totalFiles += sqlFiles.length;
+    for (const dir of config.queryDirs) {
+      const sqlFiles = glob.sync(path.join(dir, '**/*.sql'));
 
       if (sqlFiles.length === 0) {
-        this.ui.warning(`Nenhum arquivo SQL encontrado em ${queryDir}`);
+        this.ui.warning(`Nenhum arquivo SQL encontrado em ${dir}`);
         continue;
       }
 
-      for (const sqlFile of sqlFiles) {
-        this.ui.info(`Processando: ${sqlFile}`);
+      totalFiles += sqlFiles.length;
+
+      for (const filePath of sqlFiles) {
+        this.ui.info(`Processando: ${filePath}`);
 
         try {
-          const sqlContent = await fs.readFile(sqlFile, 'utf-8');
-          const queries = this.sqlParser.parseFile(sqlContent);
+          let content = await fs.readFile(filePath, 'utf-8');
+
+          content = this.normalizeFileContent(content);
+          
+          this.ui.info(`Analisando consultas em: ${filePath}`);
+          const queries = this.sqlParser.parseFile(content);
 
           if (queries.length === 0) {
-            this.ui.warning(`Nenhuma consulta encontrada em: ${sqlFile}`);
+            this.ui.warning(`Nenhuma consulta encontrada em: ${filePath}`);
             continue;
           }
 
-          const outputFile = this.generateOutputPath(queryDir, sqlFile, config.outputDir);
-
+          const outputPath = this.generateOutputPath(dir, filePath, config.outputDir);
           await this.codeGenerator.generateTypesForQueries(
             queries,
-            outputFile,
+            outputPath,
             templateDir,
             config.customTypes
           );
 
-          this.ui.success(`Tipos gerados em: ${outputFile}`);
+          this.ui.success(`Tipos gerados em: ${outputPath}`);
           processedFiles++;
         } catch (error) {
-          this.ui.error(`Erro ao processar arquivo ${sqlFile}: ${error instanceof Error ? error.message : String(error)}`);
+          this.ui.error(`Erro ao processar arquivo ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }
@@ -111,8 +105,23 @@ export class GenerateCommand {
     }
   }
 
-  private generateOutputPath(queryDir: string, sqlFile: string, outputDir: string): string {
-    const fileName = path.basename(sqlFile).replace(/\.sql$/, '.ts');
+  private normalizeFileContent(content: string): string {
+    content = content.replace(/\r\n/g, '\n');
+    content = content.replace(/--\s*@name\s*:\s*/g, '-- @name ');
+    content = content.replace(/--\s*@description\s*:\s*/g, '-- @description ');
+    content = content.replace(/--\s*@param\s*:\s*/g, '-- @param ');
+    content = content.replace(/--\s*@returnType\s*:\s*/g, '-- @returnType ');
+    content = content.replace(/--\s*@returnSingle\s*:\s*/g, '-- @returnSingle ');
+    content = content.replace(/--\s*@return\s*:/g, '-- @return '); // Adicionada esta linha
+    
+    console.log('Conteúdo normalizado:');
+    console.log(content);
+    
+    return content;
+  }
+
+  private generateOutputPath(sourceDir: string, filePath: string, outputDir: string): string {
+    const fileName = path.basename(filePath).replace(/\.sql$/, '.ts');
     return path.join(outputDir, fileName);
   }
 }
