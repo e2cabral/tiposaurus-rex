@@ -1,10 +1,10 @@
 import 'reflect-metadata';
 import { Command } from 'commander';
-import { container } from './core/di/container';
-import { GenerateCommand } from './cli/commands/generate.command';
-import { InitCommand } from './cli/commands/init.command';
-import { UIService } from './cli/ui/ui.service';
-import { DatabaseConfig } from './core/domain/interfaces/database.interface';
+import { container } from './core/di/container.js';
+import { GenerateCommand } from './cli/commands/generate.command.js';
+import { InitCommand } from './cli/commands/init.command.js';
+import { UIService } from './cli/ui/ui.service.js';
+import { DatabaseConfig } from './core/domain/interfaces/database.interface.js';
 
 function setupDatabaseConfig(config: any): void {
   container.bind<DatabaseConfig>('DatabaseConfig').toConstantValue({
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
       .option('-t, --templates <dir>', 'Diretório com templates de geração', '.templates')
       .action(async (options) => {
         try {
-          const configService = container.get(ConfigService);
+          const configService: ConfigService = container.get(ConfigService);
           const config = await configService.loadConfig(options.config);
 
           setupDatabaseConfig(config);
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   }
 }
 
-import { ConfigService } from './core/services/config.service';
+import { ConfigService } from './core/services/config.service.js';
 
 main().catch(error => {
   console.error('Erro fatal:', error);

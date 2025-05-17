@@ -1,15 +1,14 @@
 import {injectable} from 'inversify';
-import Handlebars from 'handlebars';
 import fs from 'fs/promises';
-import path from 'path';
-import {TemplateEngine, TemplateContext} from '@core/domain/interfaces/template.interface.js';
+import {TemplateContext, TemplateEngine} from "../../core/domain/interfaces/template.interface.js";
+import Handlebars from "handlebars";
 
 @injectable()
 export class HandlebarsTemplateEngine implements TemplateEngine {
   private handlebars: typeof Handlebars;
 
   constructor() {
-    this.handlebars = Handlebars.create();
+    this.handlebars = Handlebars;
     this.registerDefaultHelpers();
   }
 
@@ -79,11 +78,11 @@ export class HandlebarsTemplateEngine implements TemplateEngine {
     });
   }
 
-  private normalizeString(str: unknown): string {
+  private normalizeString(str: unknown | string): string {
     if (typeof str !== 'string') {
       str = String(str);
     }
-    return str.replace(/\./g, '_');
+    return (str as string).replace(/\./g, '_');
   }
 
   private toPascalCase(str: string): string {
@@ -100,5 +99,13 @@ export class HandlebarsTemplateEngine implements TemplateEngine {
       .filter(word => word.length > 0)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join('');
+  }
+
+  renderFromString(template: string, context: any): Promise<string> {
+    try {
+      return Promise.resolve(this.compile(template, context));
+    } catch (error) {
+      return Promise.reject(new Error(`Erro ao renderizar template: ${error instanceof Error ? error.message : String(error)}`));
+    }
   }
 }

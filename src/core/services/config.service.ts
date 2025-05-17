@@ -1,7 +1,7 @@
 import { injectable } from 'inversify';
 import fs from 'fs/promises';
 import path from 'path';
-import { AppConfig, AppConfigSchema } from '@core/domain/models/config.model';
+import {AppConfig, AppConfigSchema} from "../domain/models/config.model.js";
 
 @injectable()
 export class ConfigService {

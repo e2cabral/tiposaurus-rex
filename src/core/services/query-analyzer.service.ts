@@ -1,7 +1,7 @@
 import { injectable, inject } from 'inversify';
-import { DatabaseConnector } from '../domain/interfaces/database.interface';
-import { SQLParser } from '../domain/interfaces/sql.interface';
-import { QueryDefinition, ReturnField } from '../domain/interfaces/template.interface';
+import { DatabaseConnector } from '../domain/interfaces/database.interface.js';
+import { SQLParser } from '../domain/interfaces/sql.interface.js';
+import { QueryDefinition, ReturnField } from '../domain/interfaces/template.interface.js';
 
 @injectable()
 export class QueryAnalyzerService {

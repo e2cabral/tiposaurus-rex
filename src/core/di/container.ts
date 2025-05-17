@@ -1,21 +1,21 @@
 import { Container } from 'inversify';
 import 'reflect-metadata';
 
-import { DatabaseConnector } from '../domain/interfaces/database.interface';
-import { TemplateEngine } from '../domain/interfaces/template.interface';
-import { SQLParser } from '../domain/interfaces/sql.interface';
+import { DatabaseConnector } from '../domain/interfaces/database.interface.js';
+import { TemplateEngine } from '../domain/interfaces/template.interface.js';
+import { SQLParser } from '../domain/interfaces/sql.interface.js';
 
-import { MySQLConnector } from '@infra/adapters/mysql.adapter';
-import { HandlebarsTemplateEngine } from '@infra/templates/handlebars.template';
-import { SQLParserImpl } from '@utils/sql.parser';
 
-import { ConfigService } from '../services/config.service';
-import { CodeGeneratorService } from '../services/code-generator.service';
-import { QueryAnalyzerService } from '../services/query-analyzer.service';
+import { ConfigService } from '../services/config.service.js';
+import { CodeGeneratorService } from '../services/code-generator.service.js';
+import { QueryAnalyzerService } from '../services/query-analyzer.service.js';
+import {MySQLConnector} from "../../infra/adapters/mysql.adapter.js";
+import {HandlebarsTemplateEngine} from "../../infra/templates/handlebars.template.js";
+import {SQLParserImpl} from "../../utils/sql.parser.js";
+import {UIService} from "../../cli/ui/ui.service.js";
+import {GenerateCommand} from "../../cli/commands/generate.command.js";
+import {InitCommand} from "../../cli/commands/init.command.js";
 
-import { UIService } from '@cli/ui/ui.service';
-import { GenerateCommand } from '@cli/commands/generate.command';
-import { InitCommand } from '@cli/commands/init.command';
 
 const container = new Container();
 

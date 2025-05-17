@@ -1,4 +1,4 @@
-import { QueryDefinition, QueryParameter, ReturnField } from './template.interface.ts';
+import { QueryDefinition, QueryParameter, ReturnField } from './template.interface.js';
 
 export interface SQLParserOptions {
   commentPrefix?: string;

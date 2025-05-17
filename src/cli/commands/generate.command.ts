@@ -2,12 +2,12 @@ import { injectable, inject } from 'inversify';
 import path from 'path';
 import fs from 'fs/promises';
 import * as glob from 'glob';
-import { UIService } from '@cli/ui/ui.service';
-import { ConfigService } from '@core/services/config.service';
-import { CodeGeneratorService } from '@core/services/code-generator.service';
-import { DatabaseConnector } from '@core/domain/interfaces/database.interface';
-import { SQLParser } from '@core/domain/interfaces/sql.interface';
-import { AppConfig } from '@core/domain/models/config.model';
+import {UIService} from "../ui/ui.service.js";
+import {ConfigService} from "../../core/services/config.service.js";
+import {CodeGeneratorService} from "../../core/services/code-generator.service.js";
+import {DatabaseConnector} from "../../core/domain/interfaces/database.interface.js";
+import {SQLParser} from "../../core/domain/interfaces/sql.interface.js";
+import {AppConfig} from "../../core/domain/models/config.model.js";
 
 @injectable()
 export class GenerateCommand {

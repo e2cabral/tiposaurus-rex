@@ -1,4 +1,4 @@
-import {ReturnField} from "@core/domain/interfaces/template.interface";
+import {ReturnField} from "./template.interface.js";
 
 export interface DatabaseConfig {
   host: string;

@@ -1,7 +1,7 @@
 import { injectable, inject } from 'inversify';
 import mysql from 'mysql2/promise';
-import { DatabaseConnector, DatabaseConfig, TableMetadata, QueryResult, ColumnMetadata } from '../../core/domain/interfaces/database.interface';
-import {ReturnField} from "@core/domain/interfaces/template.interface";
+import { DatabaseConnector, DatabaseConfig, TableMetadata, QueryResult, ColumnMetadata } from '../../core/domain/interfaces/database.interface.js';
+import {ReturnField} from "../../core/domain/interfaces/template.interface.js";
 
 @injectable()
 export class MySQLConnector implements DatabaseConnector {

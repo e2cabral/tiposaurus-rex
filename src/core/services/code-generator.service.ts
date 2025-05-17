@@ -2,11 +2,11 @@ import { injectable, inject } from 'inversify';
 import fs from 'fs/promises';
 import path from 'path';
 import prettier from 'prettier';
-import { TemplateEngine, TemplateContext, QueryDefinition } from '@core/domain/interfaces/template.interface';
-import { DatabaseConnector, TableMetadata } from '@core/domain/interfaces/database.interface';
-import { UIService } from '@cli/ui/ui.service';
-import { SQLParser } from '@core/domain/interfaces/sql.interface';
-import { QueryAnalyzerService } from '@core/services/query-analyzer.service';
+import {QueryDefinition, TemplateContext, TemplateEngine} from "../domain/interfaces/template.interface.js";
+import {DatabaseConnector, TableMetadata} from "../domain/interfaces/database.interface.js";
+import {SQLParser} from "../domain/interfaces/sql.interface.js";
+import {UIService} from "../../cli/ui/ui.service.js";
+import {QueryAnalyzerService} from "./query-analyzer.service.js";
 
 @injectable()
 export class CodeGeneratorService {
@@ -51,6 +51,14 @@ export class CodeGeneratorService {
         this.typeMap = { ...this.typeMap, ...customTypes };
       }
 
+      const timestamp = new Date().toISOString();
+
+      await this.generateDatabaseConnectionFile(
+        path.dirname(outputPath),
+        templateDir,
+        timestamp
+      );
+
       const tableNames = new Set<string>();
       for (const query of queries) {
         const tables = this.sqlParser.extractTableNames(query.sql);
@@ -72,8 +80,6 @@ export class CodeGeneratorService {
       }
 
       this.ui.updateSpinner(`Gerando código para ${queries.length} consultas e ${tableMetadata.length} tabelas...`);
-
-      const timestamp = new Date().toISOString();
 
       const enrichedQueries: QueryDefinition[] = [];
       const customInterfaces: string[] = [];
@@ -234,5 +240,56 @@ export class CodeGeneratorService {
     }).join('\n');
     
     return `export interface ${interfaceName} {\n${fieldDefinitions}\n}`;
+  }
+
+  async generateDatabaseConnectionFile(
+    outputDir: string,
+    templateDir: string, 
+    timestamp: string
+  ): Promise<void> {
+    try {
+      const connectionDir = path.join(outputDir, 'connection');
+      const connectionFilePath = path.join(connectionDir, 'db-connection.ts');
+
+      try {
+        await fs.access(connectionFilePath);
+        this.ui.info('Arquivo de conexão já existe, ignorando geração');
+        return;
+      } catch (error) {
+        this.ui.info('Gerando arquivo de conexão com o banco de dados...');
+        await fs.mkdir(connectionDir, { recursive: true });
+      }
+
+      let templateContent;
+      try {
+        const dbConnectionTemplatePath = path.join(templateDir, 'db-connection.hbs');
+        await fs.access(dbConnectionTemplatePath);
+        templateContent = await this.templateEngine.renderFromFile(
+          dbConnectionTemplatePath,
+          { timestamp }
+        );
+      } catch (error) {
+        this.ui.warning('Template db-connection.hbs não encontrado, usando template padrão');
+        const { dbConnectionTemplate } = await import('../../templates/index.template.js');
+        templateContent = await this.templateEngine.renderFromString(
+          dbConnectionTemplate,
+          { timestamp }
+        );
+      }
+
+      const formattedCode = await prettier.format(templateContent, {
+        parser: 'typescript',
+        singleQuote: true,
+        trailingComma: 'es5',
+        printWidth: 100,
+      });
+
+      await fs.writeFile(connectionFilePath, formattedCode);
+      this.ui.success(`Arquivo de conexão gerado em ${connectionFilePath}`);
+      
+      return;
+    } catch (error) {
+      this.ui.warning(`Erro ao gerar arquivo de conexão: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
