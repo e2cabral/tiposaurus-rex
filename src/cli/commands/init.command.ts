@@ -109,7 +109,7 @@ export class InitCommand {
   }
 
   private async createDefaultTemplates(): Promise<void> {
-    const templateDir = path.join(process.cwd(), '.templates');
+    const templateDir = path.join(process.cwd(), 'templates');
     await fs.mkdir(templateDir, { recursive: true });
     
     const interfaceTemplate = `/**
