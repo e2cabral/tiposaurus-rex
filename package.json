@@ -9,21 +9,27 @@
   "type": "module",
   "scripts": {
     "build": "node esbuild.config.js",
-    "dev": "ts-node src/index.ts",
-    "start": "node dist/index.js",
-    "test": "jest",
-    "lint": "eslint src --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build",
     "prepare": "npm run build"
   },
   "keywords": [
     "typescript",
     "sql",
-    "generator",
-    "mysql"
+    "mysql",
+    "code-generator",
+    "types",
+    "orm"
   ],
-  "author": "Edson Cabral Junior",
+  "author": "Edson Cabral Junior <e2cabraljunior@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/e2cabral/tiposaurus-rex.git"
+  },
+  "bugs": {
+    "url": "https://github.com/e2cabral/tiposaurus-rex/issues"
+  },
+  "homepage": "https://github.com/e2cabral/tiposaurus-rex#readme",
   "dependencies": {
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",

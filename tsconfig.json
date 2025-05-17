@@ -13,6 +13,9 @@
     "outDir": "./dist",
     "baseUrl": "./src",
     "rootDir": "./src",
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "paths": {
       "@core/*": ["core/*"],
       "@cli/*": ["cli/*"],
