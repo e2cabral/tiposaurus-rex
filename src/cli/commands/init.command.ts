@@ -4,8 +4,8 @@ import inquirer from 'inquirer';
 import fs from 'fs/promises';
 import path from 'path';
 import { UIService } from '../ui/ui.service';
-import { ConfigService } from '@core/services/config.service.js';
-import { AppConfig } from '@core/domain/models/config.model.js';
+import { ConfigService } from '@core/services/config.service';
+import { AppConfig } from '@core/domain/models/config.model';
 
 @injectable()
 export class InitCommand {
