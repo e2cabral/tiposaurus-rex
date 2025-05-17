@@ -16,4 +16,9 @@ tsconfig.*.json
 .prettierrc*
 .env
 jest.config.*
-
+.templates
+src/queries/
+src/generated/
+tiposaurus.config.json
+esbuild.config.js
+templates/
