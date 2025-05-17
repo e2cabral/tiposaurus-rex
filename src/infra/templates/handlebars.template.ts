@@ -2,7 +2,7 @@ import {injectable} from 'inversify';
 import Handlebars from 'handlebars';
 import fs from 'fs/promises';
 import path from 'path';
-import {TemplateEngine, TemplateContext} from '../../core/domain/interfaces/template.interface';
+import {TemplateEngine, TemplateContext} from '@core/domain/interfaces/template.interface.js';
 
 @injectable()
 export class HandlebarsTemplateEngine implements TemplateEngine {
