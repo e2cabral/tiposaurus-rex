@@ -108,16 +108,19 @@ export class InitCommand {
   }
 
   private async createDefaultTemplates(): Promise<void> {
-  const templatesDir = 'templates';
+    const templatesFromPackage = path.join(__dirname, '../../../templates');
 
-  const configPath = 'tiposaurus.config.json';
-  try {
-    const config = await this.configService.loadConfig(configPath);
-    config.templateDir = templatesDir;
-    await this.configService.saveConfig(configPath, config);
-    this.ui.success(`Configuração atualizada para usar templates internos`);
-  } catch (error) {
-    this.ui.warning(`Não foi possível atualizar a configuração com o diretório de templates: ${error instanceof Error ? error.message : String(error)}`);
+    const configPath = 'tiposaurus.config.json';
+    let config: AppConfig;
+    try {
+      config = await this.configService.loadConfig(configPath);
+
+      config.templateDir = templatesFromPackage;
+      await this.configService.saveConfig(configPath, config);
+    } catch (error) {
+      this.ui.warning(`Não foi possível atualizar a configuração com o diretório de templates.`);
+    }
+
+    this.ui.info(`Templates internos serão usados de: ${templatesFromPackage}`);
   }
-}
 }
