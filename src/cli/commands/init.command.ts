@@ -139,7 +139,7 @@ export interface {{pascalCase query.name}}Params {
 
 export type {{pascalCase query.name}}Result = {{#if query.returnSingle}}{{query.returnType}}{{else}}{{query.returnType}}[]{{/if}};
 
-export const {{camelCase query.name}}Query = \`{{query.sql}}\`;
+export const {{camelCase query.name}}Query = \`{{{query.sql}}}\`;
 
 /**
  * Executa a consulta {{query.name}}
