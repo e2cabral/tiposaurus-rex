@@ -108,29 +108,16 @@ export class InitCommand {
   }
 
   private async createDefaultTemplates(): Promise<void> {
-    const templatesFromPackage = path.join(__dirname, '../../../templates');
-    const targetTemplatesDir = path.join(process.cwd(), 'templates');
-    
-    try {
-      await fs.mkdir(targetTemplatesDir, { recursive: true });
+  const templatesDir = 'templates';
 
-      const templateFiles = await fs.readdir(templatesFromPackage);
-
-      for (const file of templateFiles) {
-        const sourceFile = path.join(templatesFromPackage, file);
-        const targetFile = path.join(targetTemplatesDir, file);
-        await fs.copyFile(sourceFile, targetFile);
-      }
-
-      const configPath = 'tiposaurus.config.json';
-      const config = await this.configService.loadConfig(configPath);
-      config.templateDir = 'templates';
-      await this.configService.saveConfig(configPath, config);
-      
-      this.ui.success(`Templates copiados para: ${targetTemplatesDir}`);
-    } catch (error) {
-      this.ui.warning(`Não foi possível copiar os templates: ${error instanceof Error ? error.message : String(error)}`);
-      this.ui.info(`Tente criar manualmente o diretório 'templates' e copiar os templates do pacote.`);
-    }
+  const configPath = 'tiposaurus.config.json';
+  try {
+    const config = await this.configService.loadConfig(configPath);
+    config.templateDir = templatesDir;
+    await this.configService.saveConfig(configPath, config);
+    this.ui.success(`Configuração atualizada para usar templates internos`);
+  } catch (error) {
+    this.ui.warning(`Não foi possível atualizar a configuração com o diretório de templates: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
 }
