@@ -1,60 +1,72 @@
 {{#each tables}}
-    /**
-    * Interface gerada para a tabela: {{tableName}}
-    * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
-    * @timestamp {{../timestamp}}
-    */
-    export interface {{pascalCase interfaceName}} {
-    {{#each fields}}
-        {{name}}{{#if nullable}}?{{/if}}: {{type}};
-    {{/each}}
-    }
+/**
+ * Interface gerada para a tabela: {{tableName}}
+ * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * @timestamp {{../timestamp}}
+ */
+export interface {{pascalCase interfaceName}} {
+{{#each fields}}
+  {{name}}{{#if nullable}}?{{/if}}: {{type}};
+{{/each}}
+}
 
 {{/each}}
 
+{{#if customInterfaces}}
+/**
+ * Interfaces personalizadas
+ * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * @timestamp {{timestamp}}
+ */
+{{#each customInterfaces}}
+{{{this}}}
+
+{{/each}}
+{{/if}}
+
 {{#each queries}}
-    /**
-    * {{name}}
-    * {{#if description}}{{description}}{{/if}}
-    * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
-    * @timestamp {{../timestamp}}
-    */
+/**
+ * {{name}}
+ * {{#if description}}{{description}}{{/if}}
+ * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * @timestamp {{../timestamp}}
+ */
 
-    export interface {{pascalCase name}}Params {
-    {{#each params}}
-        {{name}}: {{type}};
-    {{/each}}
-    }
+export interface {{pascalCase name}}Params {
+{{#each params}}
+  {{name}}: {{type}};
+{{/each}}
+}
 
-    export type {{pascalCase name}}Result = {{returnType}};
+export type {{pascalCase name}}Result = {{returnType}};
 
-    export const {{camelCase name}}Query = `{{{sql}}}`;
+export const {{camelCase name}}Query = `{{{sql}}}`;
 
-    /**
-    * Executa a consulta {{name}}
-    * @param db Conexão com o banco de dados
-    * @param params Parâmetros da consulta
-    * @returns Resultado da consulta
-    */
-    export async function {{camelCase name}}(
-    db: { execute<T>(query: string, params?: any[]): Promise<T[]> },
-        params: {{pascalCase name}}Params
-        ): Promise<{{returnType}}{{#unless returnSingle}}[]{{/unless}}> {
-        const result = await db.execute<{{returnType}}>(
+/**
+ * Executa a consulta {{name}}
+ * @param db Conexão com o banco de dados
+ * @param params Parâmetros da consulta
+ * @returns Resultado da consulta
+ */
+export async function {{camelCase name}}(
+  db: { execute<T>(query: string, params?: any[]): Promise<T[]> },
+  params: {{pascalCase name}}Params
+): Promise<{{returnType}}{{#unless returnSingle}}[]{{/unless}}> {
+  const result = await db.execute<{{returnType}}>(
     {{camelCase name}}Query,
-        Object.values(params)
-        );
-        return {{#if returnSingle}}result[0]{{else}}result{{/if}};
-        }
+    Object.values(params)
+  );
+  return {{#if returnSingle}}result[0]{{else}}result{{/if}};
+}
 {{/each}}
 
-    /**
-    * Objeto com todas as funções de consulta
-    * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
-    * @timestamp {{timestamp}}
-    */
-    export const queryExecutors = {
+/**
+ * Objeto com todas as funções de consulta
+ * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * @timestamp {{timestamp}}
+ */
+export const queryExecutors = {
 {{#each queries}}
-    {{camelCase name}},
+  {{camelCase name}},
 {{/each}}
 };
