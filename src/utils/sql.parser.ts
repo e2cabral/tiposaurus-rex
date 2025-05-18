@@ -82,29 +82,42 @@ export class SQLParserImpl implements SQLParser {
         }
       }
 
-      if (line.match(/--\s*@description(?:\s*:)?/)) {
-        description = line.replace(/--\s*@description(?:\s*:)?\s*/, '').trim();
-        console.log(`Descrição: ${description}`);
-      } else if (line.match(/--\s*@param(?:\s*:)?/)) {
-        const paramPart = line.replace(/--\s*@param(?:\s*:)?\s*/, '').trim();
-        const [paramName, paramType] = paramPart.split(':');
-        params.push({
-          name: paramName.trim(),
-          type: paramType ? paramType.trim() : 'any'
-        });
-        console.log(`Parâmetro: ${paramName.trim()}:${paramType ? paramType.trim() : 'any'}`);
-      } else if (line.match(/--\s*@returnType(?:\s*:)?/)) {
-        returnType = line.replace(/--\s*@returnType(?:\s*:)?\s*/, '').trim();
-        console.log(`Tipo de retorno: ${returnType}`);
-      } else if (line.match(/--\s*@returnSingle(?:\s*:)?/)) {
-        const value = line.replace(/--\s*@returnSingle(?:\s*:)?\s*/, '').trim();
-        returnSingle = value.toLowerCase() === 'true';
-        console.log(`Retorno único: ${returnSingle}`);
-      } else if (line.match(/--\s*@return(?:\s*:)?/)) {
-        const fieldInfo = line.replace(/--\s*@return(?:\s*:)?\s*/, '').trim();
-        console.log(`Campo de retorno: ${fieldInfo}`);
+      const matchers = [
+        {matcher: /--\s*@description(?:\s*:)?/, action: () => {description = line.replace(/--\s*@description(?:\s*:)?\s*/, '').trim()}},
+        {matcher: /--\s*@param(?:\s*:)?/, action: () => {
+          const paramPart = line.replace(/--\s*@param(?:\s*:)?\s*/, '').trim();
+          const [paramName, paramType] = paramPart.split(':');
 
-        this.parseReturnField(fieldInfo, returnFields);
+          params.push({
+            name: paramName.trim(),
+            type: paramType ? paramType.trim() : 'any'
+          });
+        }},
+        {
+          matcher: /--\s*@returnType(?:\s*:)?/,
+          action: () => {returnType = line.replace(/--\s*@returnType(?:\s*:)?\s*/, '').trim()}
+        },
+        {
+          matcher: /--\s*@returnSingle(?:\s*:)?/,
+          action: () => {
+            const value = line.replace(/--\s*@returnSingle(?:\s*:)?\s*/, '').trim();
+            returnSingle = value.toLowerCase() === 'true';
+          }
+        },
+        {
+          matcher: /--\s*@return(?:\s*:)?/,
+          action: () => {
+            const fieldInfo = line.replace(/--\s*@return(?:\s*:)?\s*/, '').trim();
+            this.parseReturnField(fieldInfo, returnFields);
+          }
+        }
+      ];
+
+      for (const matcher of matchers) {
+        if (line.match(matcher.matcher)) {
+          matcher.action();
+          break;
+        }
       }
     }
 
@@ -117,6 +130,7 @@ export class SQLParserImpl implements SQLParser {
 
     let formattedSql = sql;
     if (returnFields.length > 0) {
+      console.log(returnFields)
       formattedSql = this.sqlFormatter.applyReturnFieldAliases(sql, returnFields);
     } else {
       formattedSql = this.sqlFormatter.processQueryForTypeScript(sql);

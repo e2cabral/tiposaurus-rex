@@ -1,135 +1,170 @@
 import {ReturnField} from '../core/domain/interfaces/template.interface.js';
 
 export class SQLFormatter {
+  private readonly SQL_RESERVED_WORDS = new Set([
+    'select', 'from', 'where', 'and', 'or', 'join', 'inner', 'outer', 'left', 'right',
+    'on', 'group', 'order', 'by', 'having', 'limit', 'offset', 'union', 'all', 'insert',
+    'update', 'delete', 'create', 'alter', 'drop', 'table', 'index', 'view', 'procedure',
+    'function', 'trigger', 'case', 'when', 'then', 'else', 'end', 'as', 'distinct', 'between',
+    'in', 'like', 'is', 'null', 'not', 'default', 'values', 'set', 'into'
+  ]);
+
+  private readonly SQL_OPERATORS = ['=', '<>', '!=', '>', '<', '>=', '<=', 'IS', 'LIKE', 'IN', 'BETWEEN'];
+
   formatSqlAliases(sql: string): string {
-    const snakeCaseAliasRegex = /(\w+(?:\.\w+)?\s+as\s+)(\w+)_(\w+)(?=[\s,)])/gi;
-
-    return sql.replace(snakeCaseAliasRegex, (match, prefix, first, second) => {
-      return `${prefix}${first}${second.charAt(0).toUpperCase() + second.slice(1)}`;
-    });
-  }
-
-  addMissingAliases(sql: string): string {
-    const noAliasColumnRegex = /([a-z0-9_]+)\.([a-z0-9_]+)(?!\s+as\s+)(?=[\s,)])/gi;
-
-    return sql.replace(noAliasColumnRegex, (match, table, column) => {
-      const camelColumn = column.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
-      return `${table}.${column} as ${camelColumn}`;
-    });
+    return sql.replace(
+      /(\w+(?:\.\w+)?\s+as\s+)(\w+)_(\w+)(?=[\s,)])/gi,
+      (_, prefix, first, second) => `${prefix}${first}${this.capitalize(second)}`
+    );
   }
 
   fixInvalidSQLSyntax(sql: string): string {
+    const cleanupAlias = (conditions: string) => conditions.replace(/\b(\w+\.\w+)\s+as\s+\w+\b/gi, '$1');
+
     let result = sql.replace(
       /\b(ON|on)\b\s+(.*?)(?=\s+(?:WHERE|where|GROUP|group|ORDER|order|LIMIT|limit|HAVING|having|LEFT|left|RIGHT|right|INNER|inner|JOIN|join|\)|\s*$))/gis,
-      (match, onKeyword, conditions) => {
-        const cleanedConditions = conditions.replace(/\b(\w+\.\w+)\s+as\s+\w+\b/gi, '$1');
-        return `${onKeyword} ${cleanedConditions}`;
-      }
+      (_, onKeyword, conditions) => `${onKeyword} ${cleanupAlias(conditions)}`
     );
 
     result = result.replace(
       /\b(WHERE|where)\b\s+(.*?)(?=\s+(?:GROUP|group|ORDER|order|LIMIT|limit|HAVING|having|\)|\s*$))/gis,
-      (match, whereKeyword, conditions) => {
-        const cleanedConditions = conditions.replace(/\b(\w+\.\w+)\s+as\s+\w+\b/gi, '$1');
-        return `${whereKeyword} ${cleanedConditions}`;
-      }
+      (_, whereKeyword, conditions) => `${whereKeyword} ${cleanupAlias(conditions)}`
     );
 
-    const operators = ['=', '<>', '!=', '>', '<', '>=', '<=', 'IS', 'LIKE', 'IN', 'BETWEEN'];
+    return this.cleanupOperatorAliases(result);
+  }
 
-    let finalResult = result;
-    for (const op of operators) {
-      const leftPattern = new RegExp(`(\\w+\\.\\w+)\\s+as\\s+\\w+\\s*${op}`, 'gi');
-      finalResult = finalResult.replace(leftPattern, `$1 ${op}`);
+  private cleanupOperatorAliases(sql: string): string {
+    let result = sql;
 
-      const rightPattern = new RegExp(`${op}\\s*(\\w+\\.\\w+)\\s+as\\s+\\w+`, 'gi');
-      finalResult = finalResult.replace(rightPattern, `${op} $1`);
+    for (const op of this.SQL_OPERATORS) {
+      result = result
+        .replace(new RegExp(`(\\w+\\.\\w+)\\s+as\\s+\\w+\\s*${op}`, 'gi'), `$1 ${op}`)
+        .replace(new RegExp(`${op}\\s*(\\w+\\.\\w+)\\s+as\\s+\\w+`, 'gi'), `${op} $1`);
     }
 
-    finalResult = finalResult.replace(/(\w+\.\w+)\s+as\s+\w+\s*=\s*\?/gi, '$1 = ?');
-
-    return finalResult;
+    return result.replace(/(\w+\.\w+)\s+as\s+\w+\s*=\s*\?/gi, '$1 = ?');
   }
 
   replaceTablesWithAliases(sql: string): string {
-    const tableAliases = new Map<string, string>();
+    const tableAliases = this.getTableAliasesFromSql(sql);
+
+    if (tableAliases.length === 0) {
+      return sql;
+    }
+
+    return this.replaceTableReferencesInSelect(sql, tableAliases);
+  }
+
+  private getTableAliasesFromSql(sql: string): Array<{ table: string, alias: string }> {
+    const tableAliases = [];
     const aliasPattern = /\b(FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s|$|\n)/gi;
     let match;
 
     while ((match = aliasPattern.exec(sql)) !== null) {
-      const tableName = match[2].trim();
-      const alias = match[3].trim();
-      if (tableName && alias && tableName !== alias) {
-        tableAliases.set(tableName, alias);
+      const [, , tableName, alias] = match;
+
+      if (this.isValidTableAlias(tableName.trim(), alias.trim())) {
+        tableAliases.push({ table: tableName.trim(), alias: alias.trim() });
       }
     }
 
-    if (tableAliases.size === 0) {
-      return sql;
-    }
+    return tableAliases;
+  }
 
-    let processedSql = sql;
-    const selectPattern = /\bSELECT\b(.*?)(?=\bFROM\b)/gis;
+  private isValidTableAlias(tableName: string, alias: string): boolean {
+    return Boolean(
+      tableName &&
+      alias &&
+      tableName !== alias &&
+      !this.SQL_RESERVED_WORDS.has(tableName.toLowerCase()) &&
+      !this.SQL_RESERVED_WORDS.has(alias.toLowerCase())
+    );
+  }
 
-    processedSql = processedSql.replace(selectPattern, (match, selectColumns) => {
+  private replaceTableReferencesInSelect(sql: string, tableAliases: Array<{ table: string, alias: string }>): string {
+    return sql.replace(/\bSELECT\b(.*?)(?=\bFROM\b)/gis, (_, selectColumns) => {
       let newSelectColumns = selectColumns;
 
       for (const [tableName, alias] of tableAliases.entries()) {
-        const tableRefPattern = new RegExp(`\\b${tableName}\\.`, 'gi');
-        newSelectColumns = newSelectColumns.replace(tableRefPattern, `${alias}.`);
+        newSelectColumns = newSelectColumns.replace(
+          new RegExp(`\\b${tableName}\\.`, 'gi'),
+          `${alias}.`
+        );
       }
 
       return `SELECT${newSelectColumns}`;
     });
-
-    return processedSql;
   }
 
   processQueryForTypeScript(sql: string): string {
-    let newSql = this.replaceTablesWithAliases(sql);
-
-    let formattedSql = this.addMissingAliases(newSql);
-
-    formattedSql = this.formatSqlAliases(formattedSql);
-
-    return this.fixInvalidSQLSyntax(formattedSql);
+    return this.fixInvalidSQLSyntax(
+      this.formatSqlAliases(
+        this.replaceTablesWithAliases(sql)
+      )
+    );
   }
 
   applyReturnFieldAliases(sql: string, returnFields: ReturnField[] | undefined): string {
-    if (!returnFields || returnFields.length === 0) {
+    if (!returnFields?.length) {
       return this.processQueryForTypeScript(sql);
     }
 
-    const tableAliases = new Map<string, string>();
-    const aliasPattern = /\b(FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s|$|\n)/gi;
+    const tableAliases = this.getTableAliasesFromSql(sql);
+    const fieldsWithAliases = this.buildFieldsWithAliases(returnFields, tableAliases);
+    const fromClause = this.extractFromClause(sql);
+
+    return `SELECT ${fieldsWithAliases.join(', ')} ${fromClause}`;
+  }
+
+  private buildFieldsWithAliases(
+    returnFields: ReturnField[],
+    tableAliases: Array<{ table: string, alias: string }>
+  ): string[] {
+    return returnFields.map(field => {
+      if (!field.sourceField) {
+        throw new Error(`Missing source field in return field: ${JSON.stringify(field)}`);
+      }
+
+      let tableAlias: string | undefined;
+
+      if (field.sourceTable) {
+        const foundAlias = tableAliases.find(entry => entry.table === field.sourceTable);
+        tableAlias = foundAlias ? foundAlias.alias : field.sourceTable;
+      }
+
+      const tablePart = tableAlias ? `${tableAlias}.` : '';
+      const aliasPart = field.alias ? ` AS ${field.alias}` : '';
+
+      return `${tablePart}${field.sourceField}${aliasPart}`;
+    });
+  }
+
+  private extractFromClause(sql: string): string {
+    const fromIndex = sql.toUpperCase().indexOf('FROM');
+    return fromIndex !== -1 ? sql.slice(fromIndex).trim() : '';
+  }
+
+  extractTableAliases(sql: string): Map<string, string> {
+    const tableAliasMap = new Map<string, string>();
+    const aliasPattern = /\b(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s+|$|\n|WHERE|JOIN|ON|ORDER|GROUP|HAVING|LIMIT)/gi;
+
     let match;
-
     while ((match = aliasPattern.exec(sql)) !== null) {
-      const tableName = match[2].trim();
-      const alias = match[3].trim();
-      if (tableName && alias && tableName !== alias) {
-        tableAliases.set(tableName, alias);
+      const [, tableName, alias] = match;
+      if (tableName?.trim() && alias?.trim() && tableName !== alias) {
+        tableAliasMap.set(alias.trim(), tableName.trim());
       }
     }
 
-    const fromMatch = /\b(FROM|from)\b(.*)$/s.exec(sql);
-    if (!fromMatch) {
-      return sql;
-    }
+    return tableAliasMap;
+  }
 
-    const correctedFromPart = this.fixInvalidSQLSyntax(fromMatch[0]);
+  private capitalize(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
 
-    const fieldsWithAliases = returnFields.map(field => {
-      if (!field.sourceTable) {
-        return `${field.sourceField} AS ${field.alias}`;
-      }
-
-      const tableAlias = tableAliases.get(field.sourceTable);
-      const tableRef = tableAlias || field.sourceTable;
-
-      return `${tableRef}.${field.sourceField} AS ${field.alias}`;
-    }).join(', ');
-
-    return `SELECT ${fieldsWithAliases} ${correctedFromPart}`;
+  private toCamelCase(str: string): string {
+    return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
   }
 }
