@@ -1,6 +1,6 @@
 {
   "name": "tiposaurus-rex",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "description": "Gerador de tipos TypeScript para consultas SQL",
   "main": "dist/index.js",
   "bin": {
