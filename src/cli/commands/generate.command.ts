@@ -49,6 +49,7 @@ export class GenerateCommand {
       await fs.access(templateDir);
     } catch {
       this.ui.error(`Diretório de templates não encontrado: ${templateDir}`);
+      this.ui.info('Você pode gerar um novo projeto usando o comando "tiposaurus init"');
       this.ui.info('Você pode especificar um diretório de templates usando a opção --templates');
       process.exit(1);
     }
