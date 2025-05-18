@@ -130,7 +130,6 @@ export class SQLParserImpl implements SQLParser {
 
     let formattedSql = sql;
     if (returnFields.length > 0) {
-      console.log(returnFields)
       formattedSql = this.sqlFormatter.applyReturnFieldAliases(sql, returnFields);
     } else {
       formattedSql = this.sqlFormatter.processQueryForTypeScript(sql);
