@@ -11,7 +11,7 @@ export class UIService {
   showBanner(): void {
     console.log('\n' + chalk.cyan(figlet.textSync('Tiposaurus Rex', { font: 'Standard' })));
     console.log(chalk.blue(' Gerador de tipos TypeScript para consultas SQL em MySQL'));
-    console.log(chalk.blue(' Versão 0.1.0') + '\n');
+    console.log(chalk.blue(' Versão 0.1.22') + '\n');
   }
 
   info(message: string): void {
