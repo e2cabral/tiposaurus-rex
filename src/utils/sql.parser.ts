@@ -153,23 +153,31 @@ export class SQLParserImpl implements SQLParser {
       returnFields: returnFields.length > 0 ? returnFields : undefined
     };
   }
+  
+private parseReturnField(fieldInfo: string, returnFields: ReturnField[]): void {
+  console.log(`Processando campo: ${fieldInfo}`);
 
-  private parseReturnField(fieldInfo: string, returnFields: ReturnField[]): void {
+  const typeParts = fieldInfo.split(':');
+  let mainPart = typeParts[0].trim();
+  let type = typeParts.length > 1 ? typeParts[1].trim() : undefined;
 
-    console.log(`Processando campo: ${fieldInfo}`);
+  const aliasParts = mainPart.split(' as ');
+  let fieldPart = aliasParts[0].trim();
+  let alias = aliasParts.length > 1 ? aliasParts[1].trim() : undefined;
+  
+  const isSqlFunction = this.sqlFormatter.isSqlFunction(fieldPart);
+  
+  let sourceTable: string | undefined;
+  let sourceField: string;
 
-    const typeParts = fieldInfo.split(':');
-    let mainPart = typeParts[0].trim();
-    let type = typeParts.length > 1 ? typeParts[1].trim() : undefined;
-
-    const aliasParts = mainPart.split(' as ');
-    let fieldPart = aliasParts[0].trim();
-    let alias = aliasParts.length > 1 ? aliasParts[1].trim() : undefined;
-
+  if (isSqlFunction) {
+    sourceField = fieldPart;
+    
+    if (!type) {
+      type = this.sqlFormatter.determineSqlExpressionType(fieldPart);
+    }
+  } else {
     const fieldParts = fieldPart.split('.');
-    let sourceTable: string | undefined;
-    let sourceField: string;
-
     if (fieldParts.length > 1) {
       sourceTable = fieldParts[0];
       sourceField = fieldParts[1];
@@ -184,18 +192,60 @@ export class SQLParserImpl implements SQLParser {
         type = 'Date';
       } else if (sourceField.includes('is_') || sourceField.includes('has_')) {
         type = 'boolean';
+      } else {
+        type = 'string';
       }
     }
-
-    console.log(`Campo processado: campo=${sourceField}, tabela=${sourceTable}, alias=${alias}, tipo=${type}`);
-
-    returnFields.push({
-      sourceField,
-      sourceTable,
-      alias: alias || sourceField,
-      type
-    });
   }
+
+  console.log(`Campo processado: campo=${sourceField}, tabela=${sourceTable}, alias=${alias}, tipo=${type}, isFunction=${isSqlFunction}`);
+
+  returnFields.push({
+    sourceField,
+    sourceTable,
+    alias: alias || sourceField,
+    type,
+    isFunction: isSqlFunction 
+  });
+}
+
+private parseReturnFunction(fieldInfo: string, returnFields: ReturnField[]): void {
+  console.log(`Processando função SQL personalizada: ${fieldInfo}`);
+
+  let alias: string | undefined;
+  let expression: string;
+  let type: string | undefined;
+
+  const [left, right] = fieldInfo.split(':');
+  if (!right) {
+    console.warn(`Formato inválido para @returnFunction: ${fieldInfo}`);
+    return;
+  }
+
+  alias = left.trim();
+  expression = right.trim();
+  
+  if (this.sqlFormatter.isSqlFunction(expression)) {
+    type = this.sqlFormatter.determineSqlExpressionType(expression);
+  }
+
+  if (!type) {
+    if (alias.toLowerCase().includes('id')) type = 'number';
+    else if (alias.toLowerCase().includes('date') || alias.toLowerCase().includes('time')) type = 'Date';
+    else if (alias.toLowerCase().includes('is_') || alias.toLowerCase().includes('has_')) type = 'boolean';
+    else type = 'string';
+  }
+
+  returnFields.push({
+    sourceField: expression,
+    sourceTable: undefined,
+    alias,
+    type,
+    isFunction: true
+  });
+
+  console.log(`Função processada: alias=${alias}, expr=${expression}, tipo=${type}`);
+}
 
   parseQuery(sql: string, metadata: Record<string, string> = {}): QueryDefinition | null {
     const name = metadata.name;
@@ -260,39 +310,6 @@ export class SQLParserImpl implements SQLParser {
     }
 
     return tableAliasMap;
-  }
-
-  private parseReturnFunction(fieldInfo: string, returnFields: ReturnField[]): void {
-    console.log(`Processando função SQL personalizada: ${fieldInfo}`);
-
-    let alias: string | undefined;
-    let expression: string;
-    let type: string | undefined;
-
-    const [left, right] = fieldInfo.split(':');
-    if (!right) {
-      console.warn(`Formato inválido para @returnFunction: ${fieldInfo}`);
-      return;
-    }
-
-    alias = left.trim();
-    expression = right.trim();
-
-    if (!type) {
-      if (alias.toLowerCase().includes('id')) type = 'number';
-      else if (alias.toLowerCase().includes('date') || alias.toLowerCase().includes('time')) type = 'Date';
-      else if (alias.toLowerCase().includes('is_') || alias.toLowerCase().includes('has_')) type = 'boolean';
-      else type = 'string';
-    }
-
-    returnFields.push({
-      sourceField: expression,
-      sourceTable: undefined,
-      alias,
-      type
-    });
-
-    console.log(`Função processada: alias=${alias}, expr=${expression}, tipo=${type}`);
   }
 
 }

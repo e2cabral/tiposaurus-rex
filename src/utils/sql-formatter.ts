@@ -1,5 +1,5 @@
 import {ReturnField} from '../core/domain/interfaces/template.interface.js';
-import {MYSQL_FUNCTIONS} from "./constants/mysql";
+import {MYSQL_FUNCTIONS} from "./constants/mysql.js";
 
 export class SQLFormatter {
   private readonly SQL_RESERVED_WORDS = new Set([
@@ -209,5 +209,120 @@ export class SQLFormatter {
 
   private toCamelCase(str: string): string {
     return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  }
+
+  private readonly FUNCTION_TYPE_MAP: Record<string, string> = {
+    'CONCAT': 'string',
+    'CONCAT_WS': 'string',
+    'LOWER': 'string',
+    'UPPER': 'string',
+    'SUBSTRING': 'string',
+    'TRIM': 'string',
+    'LTRIM': 'string',
+    'RTRIM': 'string',
+    'LEFT': 'string',
+    'RIGHT': 'string',
+    'LPAD': 'string',
+    'RPAD': 'string',
+    'REPLACE': 'string',
+    'REGEXP_REPLACE': 'string',
+
+    'ABS': 'number',
+    'ROUND': 'number',
+    'CEILING': 'number',
+    'CEIL': 'number',
+    'FLOOR': 'number',
+    'RAND': 'number',
+    'SIGN': 'number',
+    'TRUNCATE': 'number',
+    'SUM': 'number',
+    'AVG': 'number',
+    'COUNT': 'number',
+    'MIN': 'number',
+    'MAX': 'number',
+
+    'NOW': 'Date',
+    'CURDATE': 'Date',
+    'CURTIME': 'string',
+    'DATE': 'Date',
+    'DATE_FORMAT': 'string',
+    'DATE_ADD': 'Date',
+    'DATE_SUB': 'Date',
+    'DATEDIFF': 'number',
+    'DAY': 'number',
+    'MONTH': 'number',
+    'YEAR': 'number',
+    'HOUR': 'number',
+    'MINUTE': 'number',
+    'SECOND': 'number',
+    'ADDDATE': 'Date',
+    'SUBDATE': 'Date',
+
+    'JSON_EXTRACT': 'any',
+    'JSON_OBJECT': 'Record<string, any>',
+    'JSON_ARRAY': 'any[]',
+    'JSON_CONTAINS': 'boolean',
+    'JSON_KEYS': 'string[]'
+  };
+
+  isSqlFunction(expression: string): boolean {
+    const functionRegex = /^\s*(\w+)\s*\(/i;
+    const match = functionRegex.exec(expression);
+
+    if (!match) return false;
+
+    const functionName = match[1]?.toUpperCase();
+    return MYSQL_FUNCTIONS.has(functionName);
+  }
+
+  extractNestedFunctions(expression: string): {
+    functions: string[],
+    outerFunction: string | null,
+    returnType: string
+  } {
+    const functions: string[] = [];
+    const functionRegex = /(\w+)\s*\(((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*)\)/g;
+    let match;
+
+    functionRegex.lastIndex = 0;
+
+    while ((match = functionRegex.exec(expression)) !== null) {
+      const [fullMatch, funcName, args] = match;
+      functions.push(fullMatch);
+
+      this.extractNestedFunctions(args);
+    }
+
+    functionRegex.lastIndex = 0;
+    const outerMatch = functionRegex.exec(expression);
+    const outerFunction = outerMatch ? outerMatch[1]?.toUpperCase() : null;
+
+    let returnType = 'any';
+    if (outerFunction && this.FUNCTION_TYPE_MAP[outerFunction]) {
+      returnType = this.FUNCTION_TYPE_MAP[outerFunction];
+    }
+
+    return { functions, outerFunction, returnType };
+  }
+
+  determineSqlExpressionType(expression: string): string {
+    if (this.isSqlFunction(expression)) {
+      const { outerFunction, returnType } = this.extractNestedFunctions(expression);
+      return returnType;
+    }
+
+    if (/id$|_id$|count$|total$|sum$|avg$|min$|max$|price$|amount$/i.test(expression)) {
+      return 'number';
+    }
+
+    if (/date$|time$|created_at$|updated_at$/i.test(expression)) {
+      return 'Date';
+    }
+
+    if (/^is_|^has_|active$|enabled$/i.test(expression)) {
+      return 'boolean';
+    }
+
+    return 'string';
   }
 }
