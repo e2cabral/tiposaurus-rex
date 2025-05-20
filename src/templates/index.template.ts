@@ -16,8 +16,15 @@ export const queryTemplate = `/**
 * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
 * @timestamp {{timestamp}}
 */
-import { getConnection, DatabaseConnection } from './connection/db-connection';
+import { getConnection, DatabaseConnection } from '../connection/db-connection';
 
+{{#if query.returnFields}}
+export interface {{pascalCase query.returnType}} {
+{{#each query.returnFields}}
+  {{camelCase alias}}{{#if nullable}}?{{/if}}: {{type}}; {{#if isFunction}}// Função SQL{{/if}}
+{{/each}}
+}
+{{/if}}
 export interface {{pascalCase query.name}}Params {
 {{#each query.params}}
     {{name}}: {{type}};
@@ -26,7 +33,7 @@ export interface {{pascalCase query.name}}Params {
 
 export type {{pascalCase query.name}}Result = {{#if query.returnSingle}}{{query.returnType}}{{else}}{{query.returnType}}[]{{/if}};
 
-export const {{camelCase query.name}}Query = \`{{{query.sql}}}\`;
+export const {{camelCase query.name}}Query = \`{{query.sql}}\`;
 
 /**
 * Executa a consulta {{query.name}}

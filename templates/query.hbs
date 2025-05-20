@@ -6,6 +6,13 @@
 */
 import { getConnection, DatabaseConnection } from '../connection/db-connection';
 
+{{#if query.returnFields}}
+export interface {{pascalCase query.returnType}} {
+{{#each query.returnFields}}
+  {{camelCase alias}}{{#if nullable}}?{{/if}}: {{type}}; {{#if isFunction}}// Função SQL{{/if}}
+{{/each}}
+}
+{{/if}}
 export interface {{pascalCase query.name}}Params {
 {{#each query.params}}
     {{name}}: {{type}};
