@@ -1,4 +1,5 @@
 import {ReturnField} from '../core/domain/interfaces/template.interface.js';
+import {MYSQL_FUNCTIONS} from "./constants/mysql";
 
 export class SQLFormatter {
   private readonly SQL_RESERVED_WORDS = new Set([
@@ -100,7 +101,9 @@ export class SQLFormatter {
   processQueryForTypeScript(sql: string): string {
     return this.fixInvalidSQLSyntax(
       this.formatSqlAliases(
-        this.replaceTablesWithAliases(sql)
+        this.addMissingAliasesToFunctions(
+          this.replaceTablesWithAliases(sql)
+        )
       )
     );
   }
@@ -133,10 +136,13 @@ export class SQLFormatter {
         tableAlias = foundAlias ? foundAlias.alias : field.sourceTable;
       }
 
-      const tablePart = tableAlias ? `${tableAlias}.` : '';
-      const aliasPart = field.alias ? ` AS ${field.alias}` : '';
+      const isFunction = /\w+\s*\(.*\)/.test(field.sourceField);
+      const fieldExpression = isFunction
+        ? field.sourceField
+        : `${tableAlias ? `${tableAlias}.` : ''}${field.sourceField}`;
 
-      return `${tablePart}${field.sourceField}${aliasPart}`;
+      const aliasPart = field.alias ? ` AS ${field.alias}` : '';
+      return `${fieldExpression}${aliasPart}`;
     });
   }
 
@@ -144,6 +150,43 @@ export class SQLFormatter {
     const fromIndex = sql.toUpperCase().indexOf('FROM');
     return fromIndex !== -1 ? sql.slice(fromIndex).trim() : '';
   }
+
+  private addMissingAliasesToFunctions(sql: string): string {
+    return sql.replace(/\bSELECT\b(.*?)(?=\bFROM\b)/is, (match, selectPart) => {
+      const columns = [];
+      let buffer = '';
+      let parenCount = 0;
+
+      for (let i = 0; i < selectPart.length; i++) {
+        const char = selectPart[i];
+
+        if (char === ',' && parenCount === 0) {
+          columns.push(buffer.trim());
+          buffer = '';
+        } else {
+          if (char === '(') parenCount++;
+          if (char === ')') parenCount--;
+          buffer += char;
+        }
+      }
+      if (buffer) columns.push(buffer.trim());
+
+      const processed = columns.map((col, index) => {
+        if (/AS\s+\w+$/i.test(col)) return col;
+
+        const functionMatch = col.match(/^(\w+)\s*\(/i);
+        if (!functionMatch) return col;
+
+        const funcName = functionMatch[1].toUpperCase();
+        if (!MYSQL_FUNCTIONS.has(funcName)) return col;
+
+        return `${col} AS property${index + 1}`;
+      });
+
+      return `SELECT ${processed.join(', ')} `;
+    });
+  }
+
 
   extractTableAliases(sql: string): Map<string, string> {
     const tableAliasMap = new Map<string, string>();

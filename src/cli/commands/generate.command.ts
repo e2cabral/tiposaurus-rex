@@ -43,7 +43,7 @@ export class GenerateCommand {
   }
 
   async processQueryDirectories(config: AppConfig, templatesDir?: string): Promise<void> {
-    const templateDir = templatesDir || path.join(process.cwd(), '.templates');
+    const templateDir = templatesDir ? path.normalize(templatesDir) : path.join(process.cwd(), '.templates');
 
     try {
       await fs.access(templateDir);
@@ -58,7 +58,10 @@ export class GenerateCommand {
     let processedFiles = 0;
 
     for (const dir of config.queryDirs) {
-      const sqlFiles = glob.sync(path.join(dir, '**/*.sql'));
+      const normalizedDir = path.normalize(dir);
+
+      const patter = path.join(normalizedDir, `**${path.sep}*.sql`);
+      const sqlFiles = glob.sync(patter).map(file => path.normalize(file));
 
       if (sqlFiles.length === 0) {
         this.ui.warning(`Nenhum arquivo SQL encontrado em ${dir}`);
@@ -121,7 +124,8 @@ export class GenerateCommand {
   }
 
   private generateOutputPath(sourceDir: string, filePath: string, outputDir: string): string {
-    const fileName = path.basename(filePath).replace(/\.sql$/, '.ts');
+    const normalizedPath = path.normalize(filePath)
+    const fileName = path.basename(normalizedPath).replace(/\.sql$/, '.ts');
     return path.join(outputDir, fileName);
   }
 }

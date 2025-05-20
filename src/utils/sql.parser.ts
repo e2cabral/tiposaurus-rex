@@ -110,7 +110,15 @@ export class SQLParserImpl implements SQLParser {
             const fieldInfo = line.replace(/--\s*@return(?:\s*:)?\s*/, '').trim();
             this.parseReturnField(fieldInfo, returnFields);
           }
+        },
+        {
+          matcher: /--\s*@returnFunction(?:\s*:)?/,
+          action: () => {
+            const fieldInfo = line.replace(/--\s*@returnFunction(?:\s*:)?\s*/, '').trim();
+            this.parseReturnFunction(fieldInfo, returnFields);
+          }
         }
+
       ];
 
       for (const matcher of matchers) {
@@ -253,4 +261,38 @@ export class SQLParserImpl implements SQLParser {
 
     return tableAliasMap;
   }
+
+  private parseReturnFunction(fieldInfo: string, returnFields: ReturnField[]): void {
+    console.log(`Processando função SQL personalizada: ${fieldInfo}`);
+
+    let alias: string | undefined;
+    let expression: string;
+    let type: string | undefined;
+
+    const [left, right] = fieldInfo.split(':');
+    if (!right) {
+      console.warn(`Formato inválido para @returnFunction: ${fieldInfo}`);
+      return;
+    }
+
+    alias = left.trim();
+    expression = right.trim();
+
+    if (!type) {
+      if (alias.toLowerCase().includes('id')) type = 'number';
+      else if (alias.toLowerCase().includes('date') || alias.toLowerCase().includes('time')) type = 'Date';
+      else if (alias.toLowerCase().includes('is_') || alias.toLowerCase().includes('has_')) type = 'boolean';
+      else type = 'string';
+    }
+
+    returnFields.push({
+      sourceField: expression,
+      sourceTable: undefined,
+      alias,
+      type
+    });
+
+    console.log(`Função processada: alias=${alias}, expr=${expression}, tipo=${type}`);
+  }
+
 }
