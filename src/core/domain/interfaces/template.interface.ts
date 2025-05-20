@@ -20,6 +20,11 @@ export interface ReturnField {
   sourceTable?: string;
   type?: string;
   nullable?: boolean;
+  isFunction?: boolean;
+  functionInfo?: {
+    outerFunctionName?: string;
+    returnType?: string;
+  };
 }
 
 export interface TemplateContext {
