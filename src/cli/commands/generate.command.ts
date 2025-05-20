@@ -60,8 +60,8 @@ export class GenerateCommand {
     for (const dir of config.queryDirs) {
       const normalizedDir = path.normalize(dir);
 
-      const patter = path.join(normalizedDir, `**${path.sep}*.sql`);
-      const sqlFiles = glob.sync(patter).map(file => path.normalize(file));
+      const pattern = path.posix.join(normalizedDir.replace(/\\/g, '/'), '**', '*.sql');
+      const sqlFiles = glob.sync(pattern).map(file => path.normalize(file));
 
       if (sqlFiles.length === 0) {
         this.ui.warning(`Nenhum arquivo SQL encontrado em ${dir}`);
@@ -77,7 +77,7 @@ export class GenerateCommand {
           let content = await fs.readFile(filePath, 'utf-8');
 
           content = this.normalizeFileContent(content);
-          
+        
           this.ui.info(`Analisando consultas em: ${filePath}`);
           const queries = this.sqlParser.parseFile(content);
 
@@ -124,7 +124,7 @@ export class GenerateCommand {
   }
 
   private generateOutputPath(sourceDir: string, filePath: string, outputDir: string): string {
-    const normalizedPath = path.normalize(filePath)
+    const normalizedPath = path.normalize(filePath);
     const fileName = path.basename(normalizedPath).replace(/\.sql$/, '.ts');
     return path.join(outputDir, fileName);
   }
