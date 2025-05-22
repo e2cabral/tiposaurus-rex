@@ -56,12 +56,6 @@ export class CodeGeneratorService {
 
       const timestamp = new Date().toISOString();
 
-      await this.generateDatabaseConnectionFile(
-        path.dirname(outputPath),
-        templateDir,
-        timestamp
-      );
-
       const tableNames = new Set<string>();
       for (const query of queries) {
         const tables = this.sqlParser.extractTableNames(query.sql);
@@ -248,56 +242,5 @@ export class CodeGeneratorService {
     }).join('\n');
 
     return `export interface ${interfaceName} {\n${fieldDefinitions}\n}`;
-  }
-
-  async generateDatabaseConnectionFile(
-    outputDir: string,
-    templateDir: string,
-    timestamp: string
-  ): Promise<void> {
-    try {
-      const connectionDir = path.join(outputDir, 'connection');
-      const connectionFilePath = path.join(connectionDir, 'db-connection.ts');
-
-      try {
-        await fs.access(connectionFilePath);
-        this.ui.info('Arquivo de conexão já existe, ignorando geração');
-        return;
-      } catch (error) {
-        this.ui.info('Gerando arquivo de conexão com o banco de dados...');
-        await fs.mkdir(connectionDir, {recursive: true});
-      }
-
-      let templateContent;
-      try {
-        const dbConnectionTemplatePath = path.join(templateDir, 'db-connection.hbs');
-        await fs.access(dbConnectionTemplatePath);
-        templateContent = await this.templateEngine.renderFromFile(
-          dbConnectionTemplatePath,
-          {timestamp}
-        );
-      } catch (error) {
-        this.ui.warning('Template db-connection.hbs não encontrado, usando template padrão');
-        const {dbConnectionTemplate} = await import('../../templates/index.template.js');
-        templateContent = await this.templateEngine.renderFromString(
-          dbConnectionTemplate,
-          {timestamp}
-        );
-      }
-
-      const formattedCode = await prettier.format(templateContent, {
-        parser: 'typescript',
-        singleQuote: true,
-        trailingComma: 'es5',
-        printWidth: 100,
-      });
-
-      await fs.writeFile(connectionFilePath, formattedCode);
-      this.ui.success(`Arquivo de conexão gerado em ${connectionFilePath}`);
-
-      return;
-    } catch (error) {
-      this.ui.warning(`Erro ao gerar arquivo de conexão: ${error instanceof Error ? error.message : String(error)}`);
-    }
   }
 }
