@@ -13,14 +13,35 @@ export class SQLFormatter {
   private readonly SQL_OPERATORS = ['=', '<>', '!=', '>', '<', '>=', '<=', 'IS', 'LIKE', 'IN', 'BETWEEN'];
 
   formatSqlAliases(sql: string): string {
-    return sql.replace(
-      /(\w+(?:\.\w+)?\s+as\s+)(\w+)_(\w+)(?=[\s,)])/gi,
+    const fixImplicitAliases = sql.replace(/(\b\w+(?:\.\w+)?\b)\s+(\b\w+\b)(?=[\s,)])/gi, (match, field, possibleAlias) => {
+      if (this.isReservedWord(field) || this.isReservedWord(possibleAlias)) {
+        return match;
+      }
+
+      if (/\bas\b/i.test(match)) {
+        return match;
+      }
+      
+      return `${field} AS ${possibleAlias}`;
+    });
+
+    let result = fixImplicitAliases.replace(
+      /(\w+(?:\.\w+)?\s+AS\s+)(\w+)_(\w+)(?=[\s,)])/gi,
       (_, prefix, first, second) => `${prefix}${first}${this.capitalize(second)}`
     );
+
+    result = result.replace(
+      /(\w+(?:\.\w+)?\s+AS\s+)([A-Z][a-z]+)([A-Z]\w+)(?=[\s,)])/g,
+      (match, prefix, first, rest) => {
+        return `${prefix}${first}${rest}`;
+      }
+    );
+    
+    return result;
   }
 
   fixInvalidSQLSyntax(sql: string): string {
-    const cleanupAlias = (conditions: string) => conditions.replace(/\b(\w+\.\w+)\s+as\s+\w+\b/gi, '$1');
+    const cleanupAlias = (conditions: string) => conditions.replace(/\b(\w+\.\w+)\s+AS\s+\w+\b/gi, '$1');
 
     let result = sql.replace(
       /\b(ON|on)\b\s+(.*?)(?=\s+(?:WHERE|where|GROUP|group|ORDER|order|LIMIT|limit|HAVING|having|LEFT|left|RIGHT|right|INNER|inner|JOIN|join|\)|\s*$))/gis,
@@ -40,11 +61,11 @@ export class SQLFormatter {
 
     for (const op of this.SQL_OPERATORS) {
       result = result
-        .replace(new RegExp(`(\\w+\\.\\w+)\\s+as\\s+\\w+\\s*${op}`, 'gi'), `$1 ${op}`)
-        .replace(new RegExp(`${op}\\s*(\\w+\\.\\w+)\\s+as\\s+\\w+`, 'gi'), `${op} $1`);
+        .replace(new RegExp(`(\\w+\\.\\w+)\\s+AS\\s+\\w+\\s*${op}`, 'gi'), `$1 ${op}`)
+        .replace(new RegExp(`${op}\\s*(\\w+\\.\\w+)\\s+AS\\s+\\w+`, 'gi'), `${op} $1`);
     }
 
-    return result.replace(/(\w+\.\w+)\s+as\s+\w+\s*=\s*\?/gi, '$1 = ?');
+    return result.replace(/(\w+\.\w+)\s+AS\s+\w+\s*=\s*\?/gi, '$1 = ?');
   }
 
   replaceTablesWithAliases(sql: string): string {
@@ -87,9 +108,9 @@ export class SQLFormatter {
     return sql.replace(/\bSELECT\b(.*?)(?=\bFROM\b)/gis, (_, selectColumns) => {
       let newSelectColumns = selectColumns;
 
-      for (const [tableName, alias] of tableAliases.entries()) {
+      for (const { table, alias } of tableAliases) {
         newSelectColumns = newSelectColumns.replace(
-          new RegExp(`\\b${tableName}\\.`, 'gi'),
+          new RegExp(`\\b${table}\\.`, 'gi'),
           `${alias}.`
         );
       }
@@ -141,8 +162,9 @@ export class SQLFormatter {
         ? field.sourceField
         : `${tableAlias ? `${tableAlias}.` : ''}${field.sourceField}`;
 
-      const aliasPart = field.alias ? ` AS ${field.alias}` : '';
-      return `${fieldExpression}${aliasPart}`;
+      return field.alias 
+        ? `${fieldExpression} AS "${field.alias}"` 
+        : fieldExpression;
     });
   }
 
@@ -172,7 +194,7 @@ export class SQLFormatter {
       if (buffer) columns.push(buffer.trim());
 
       const processed = columns.map((col, index) => {
-        if (/AS\s+\w+$/i.test(col)) return col;
+        if (/\bAS\b\s+\w+$/i.test(col)) return col;
 
         const functionMatch = col.match(/^(\w+)\s*\(/i);
         if (!functionMatch) return col;
@@ -324,5 +346,11 @@ export class SQLFormatter {
     }
 
     return 'string';
+  }
+
+  // Adicione este novo método para verificar corretamente palavras reservadas
+  private isReservedWord(word: string): boolean {
+    // Verifica se a palavra EXATA está na lista de palavras reservadas
+    return this.SQL_RESERVED_WORDS.has(word.toLowerCase());
   }
 }
