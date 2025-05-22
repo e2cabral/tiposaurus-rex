@@ -22,3 +22,4 @@ src/generated/
 tiposaurus.config.json
 esbuild.config.js
 templates/
+install-and-generate.sh
