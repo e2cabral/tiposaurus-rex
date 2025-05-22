@@ -1,10 +1,11 @@
+import mysql from "mysql2/promise";
+
 /**
 * {{query.name}}
 * {{#if query.description}}{{query.description}}{{/if}}
 * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
 * @timestamp {{timestamp}}
 */
-import { getConnection, DatabaseConnection } from '../connection/db-connection';
 
 {{#if query.returnFields}}
 export interface {{pascalCase query.returnType}} {
@@ -21,7 +22,7 @@ export interface {{pascalCase query.name}}Params {
 
 export type {{pascalCase query.name}}Result = {{#if query.returnSingle}}{{query.returnType}}{{else}}{{query.returnType}}[]{{/if}};
 
-export const {{camelCase query.name}}Query = `{{query.sql}}`;
+export const {{camelCase query.name}}Query = `{{{query.sql}}}`;
 
 /**
 * Executa a consulta {{query.name}}
@@ -30,11 +31,9 @@ export const {{camelCase query.name}}Query = `{{query.sql}}`;
 * @returns Resultado da consulta
 */
 export async function {{camelCase query.name}}(
+db: mysql.Connection,
 params: {{pascalCase query.name}}Params
 ): Promise<{{pascalCase query.name}}Result{{#unless query.returnSingle}}[]{{/unless}}> {
-const connection = await getConnection();
-return connection.execute<{{pascalCase query.name}}Result{{#unless query.returnSingle}}[]{{/unless}}>(
-{{camelCase query.name}}Query,
-Object.values(params)
-);
+const rows = (await db.execute({{camelCase query.name}}Query, Object.values(params)))[0];
+return rows as unknown as {{pascalCase query.name}}Result{{#unless query.returnSingle}}[]{{/unless}};
 }
