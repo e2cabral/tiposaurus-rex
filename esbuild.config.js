@@ -1,7 +1,6 @@
 import * as esbuild from 'esbuild';
 import { nodeExternalsPlugin } from 'esbuild-node-externals';
 import fs from 'fs';
-import path from 'path';
 
 async function build() {
     try {
