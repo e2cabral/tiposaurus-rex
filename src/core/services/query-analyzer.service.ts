@@ -16,7 +16,7 @@ export class QueryAnalyzerService {
     }
 
     try {
-      let enrichedFields: ReturnField[] = [...query.returnFields];
+      const enrichedFields: ReturnField[] = [...query.returnFields];
 
       const customType = this.generateCustomInterface(query.returnType, enrichedFields);
       
