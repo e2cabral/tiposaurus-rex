@@ -1,29 +1,140 @@
-import {ReturnField} from '../core/domain/interfaces/template.interface.js';
-import {MYSQL_FUNCTIONS} from "./constants/mysql.js";
+import { ReturnField } from '../core/domain/interfaces/template.interface.js';
+import { MYSQL_FUNCTIONS } from './constants/mysql.js';
 
 export class SQLFormatter {
   private readonly SQL_RESERVED_WORDS = new Set([
-    'select', 'from', 'where', 'and', 'or', 'join', 'inner', 'outer', 'left', 'right',
-    'on', 'group', 'order', 'by', 'having', 'limit', 'offset', 'union', 'all', 'insert',
-    'update', 'delete', 'create', 'alter', 'drop', 'table', 'index', 'view', 'procedure',
-    'function', 'trigger', 'case', 'when', 'then', 'else', 'end', 'as', 'distinct', 'between',
-    'in', 'like', 'is', 'null', 'not', 'default', 'values', 'set', 'into'
+    'select',
+    'from',
+    'where',
+    'and',
+    'or',
+    'join',
+    'inner',
+    'outer',
+    'left',
+    'right',
+    'on',
+    'group',
+    'order',
+    'by',
+    'having',
+    'limit',
+    'offset',
+    'union',
+    'all',
+    'insert',
+    'update',
+    'delete',
+    'create',
+    'alter',
+    'drop',
+    'table',
+    'index',
+    'view',
+    'procedure',
+    'function',
+    'trigger',
+    'case',
+    'when',
+    'then',
+    'else',
+    'end',
+    'as',
+    'distinct',
+    'between',
+    'in',
+    'like',
+    'is',
+    'null',
+    'not',
+    'default',
+    'values',
+    'set',
+    'into',
   ]);
 
-  private readonly SQL_OPERATORS = ['=', '<>', '!=', '>', '<', '>=', '<=', 'IS', 'LIKE', 'IN', 'BETWEEN'];
+  private readonly SQL_OPERATORS = [
+    '=',
+    '<>',
+    '!=',
+    '>',
+    '<',
+    '>=',
+    '<=',
+    'IS',
+    'LIKE',
+    'IN',
+    'BETWEEN',
+  ];
+  private readonly FUNCTION_TYPE_MAP: Record<string, string> = {
+    CONCAT: 'string',
+    CONCAT_WS: 'string',
+    LOWER: 'string',
+    UPPER: 'string',
+    SUBSTRING: 'string',
+    TRIM: 'string',
+    LTRIM: 'string',
+    RTRIM: 'string',
+    LEFT: 'string',
+    RIGHT: 'string',
+    LPAD: 'string',
+    RPAD: 'string',
+    REPLACE: 'string',
+    REGEXP_REPLACE: 'string',
+
+    ABS: 'number',
+    ROUND: 'number',
+    CEILING: 'number',
+    CEIL: 'number',
+    FLOOR: 'number',
+    RAND: 'number',
+    SIGN: 'number',
+    TRUNCATE: 'number',
+    SUM: 'number',
+    AVG: 'number',
+    COUNT: 'number',
+    MIN: 'number',
+    MAX: 'number',
+
+    NOW: 'Date',
+    CURDATE: 'Date',
+    CURTIME: 'string',
+    DATE: 'Date',
+    DATE_FORMAT: 'string',
+    DATE_ADD: 'Date',
+    DATE_SUB: 'Date',
+    DATEDIFF: 'number',
+    DAY: 'number',
+    MONTH: 'number',
+    YEAR: 'number',
+    HOUR: 'number',
+    MINUTE: 'number',
+    SECOND: 'number',
+    ADDDATE: 'Date',
+    SUBDATE: 'Date',
+
+    JSON_EXTRACT: 'any',
+    JSON_OBJECT: 'Record<string, any>',
+    JSON_ARRAY: 'any[]',
+    JSON_CONTAINS: 'boolean',
+    JSON_KEYS: 'string[]',
+  };
 
   formatSqlAliases(sql: string): string {
-    const fixImplicitAliases = sql.replace(/(\b\w+(?:\.\w+)?\b)\s+(\b\w+\b)(?=[\s,)])/gi, (match, field, possibleAlias) => {
-      if (this.isReservedWord(field) || this.isReservedWord(possibleAlias)) {
-        return match;
-      }
+    const fixImplicitAliases = sql.replace(
+      /(\b\w+(?:\.\w+)?\b)\s+(\b\w+\b)(?=[\s,)])/gi,
+      (match, field, possibleAlias) => {
+        if (this.isReservedWord(field) || this.isReservedWord(possibleAlias)) {
+          return match;
+        }
 
-      if (/\bas\b/i.test(match)) {
-        return match;
+        if (/\bas\b/i.test(match)) {
+          return match;
+        }
+
+        return `${field} AS ${possibleAlias}`;
       }
-      
-      return `${field} AS ${possibleAlias}`;
-    });
+    );
 
     let result = fixImplicitAliases.replace(
       /(\w+(?:\.\w+)?\s+AS\s+)(\w+)_(\w+)(?=[\s,)])/gi,
@@ -36,12 +147,13 @@ export class SQLFormatter {
         return `${prefix}${first}${rest}`;
       }
     );
-    
+
     return result;
   }
 
   fixInvalidSQLSyntax(sql: string): string {
-    const cleanupAlias = (conditions: string) => conditions.replace(/\b(\w+\.\w+)\s+AS\s+\w+\b/gi, '$1');
+    const cleanupAlias = (conditions: string) =>
+      conditions.replace(/\b(\w+\.\w+)\s+AS\s+\w+\b/gi, '$1');
 
     let result = sql.replace(
       /\b(ON|on)\b\s+(.*?)(?=\s+(?:WHERE|where|GROUP|group|ORDER|order|LIMIT|limit|HAVING|having|LEFT|left|RIGHT|right|INNER|inner|JOIN|join|\)|\s*$))/gis,
@@ -56,18 +168,6 @@ export class SQLFormatter {
     return this.cleanupOperatorAliases(result);
   }
 
-  private cleanupOperatorAliases(sql: string): string {
-    let result = sql;
-
-    for (const op of this.SQL_OPERATORS) {
-      result = result
-        .replace(new RegExp(`(\\w+\\.\\w+)\\s+AS\\s+\\w+\\s*${op}`, 'gi'), `$1 ${op}`)
-        .replace(new RegExp(`${op}\\s*(\\w+\\.\\w+)\\s+AS\\s+\\w+`, 'gi'), `${op} $1`);
-    }
-
-    return result.replace(/(\w+\.\w+)\s+AS\s+\w+\s*=\s*\?/gi, '$1 = ?');
-  }
-
   replaceTablesWithAliases(sql: string): string {
     const tableAliases = this.getTableAliasesFromSql(sql);
 
@@ -78,54 +178,9 @@ export class SQLFormatter {
     return this.replaceTableReferencesInSelect(sql, tableAliases);
   }
 
-  private getTableAliasesFromSql(sql: string): Array<{ table: string, alias: string }> {
-    const tableAliases = [];
-    const aliasPattern = /\b(FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s|$|\n)/gi;
-    let match;
-
-    while ((match = aliasPattern.exec(sql)) !== null) {
-      const [, , tableName, alias] = match;
-
-      if (this.isValidTableAlias(tableName.trim(), alias.trim())) {
-        tableAliases.push({ table: tableName.trim(), alias: alias.trim() });
-      }
-    }
-
-    return tableAliases;
-  }
-
-  private isValidTableAlias(tableName: string, alias: string): boolean {
-    return Boolean(
-      tableName &&
-      alias &&
-      tableName !== alias &&
-      !this.SQL_RESERVED_WORDS.has(tableName.toLowerCase()) &&
-      !this.SQL_RESERVED_WORDS.has(alias.toLowerCase())
-    );
-  }
-
-  private replaceTableReferencesInSelect(sql: string, tableAliases: Array<{ table: string, alias: string }>): string {
-    return sql.replace(/\bSELECT\b(.*?)(?=\bFROM\b)/gis, (_, selectColumns) => {
-      let newSelectColumns = selectColumns;
-
-      for (const { table, alias } of tableAliases) {
-        newSelectColumns = newSelectColumns.replace(
-          new RegExp(`\\b${table}\\.`, 'gi'),
-          `${alias}.`
-        );
-      }
-
-      return `SELECT${newSelectColumns}`;
-    });
-  }
-
   processQueryForTypeScript(sql: string): string {
     return this.fixInvalidSQLSyntax(
-      this.formatSqlAliases(
-        this.addMissingAliasesToFunctions(
-          this.replaceTablesWithAliases(sql)
-        )
-      )
+      this.formatSqlAliases(this.addMissingAliasesToFunctions(this.replaceTablesWithAliases(sql)))
     );
   }
 
@@ -141,78 +196,10 @@ export class SQLFormatter {
     return `SELECT ${fieldsWithAliases.join(', ')} ${fromClause}`;
   }
 
-  private buildFieldsWithAliases(
-    returnFields: ReturnField[],
-    tableAliases: Array<{ table: string, alias: string }>
-  ): string[] {
-    return returnFields.map(field => {
-      if (!field.sourceField) {
-        throw new Error(`Missing source field in return field: ${JSON.stringify(field)}`);
-      }
-
-      let tableAlias: string | undefined;
-
-      if (field.sourceTable) {
-        const foundAlias = tableAliases.find(entry => entry.table === field.sourceTable);
-        tableAlias = foundAlias ? foundAlias.alias : field.sourceTable;
-      }
-
-      const isFunction = /\w+\s*\(.*\)/.test(field.sourceField);
-      const fieldExpression = isFunction
-        ? field.sourceField
-        : `${tableAlias ? `${tableAlias}.` : ''}${field.sourceField}`;
-
-      return field.alias 
-        ? `${fieldExpression} AS "${field.alias}"` 
-        : fieldExpression;
-    });
-  }
-
-  private extractFromClause(sql: string): string {
-    const fromIndex = sql.toUpperCase().indexOf('FROM');
-    return fromIndex !== -1 ? sql.slice(fromIndex).trim() : '';
-  }
-
-  private addMissingAliasesToFunctions(sql: string): string {
-    return sql.replace(/\bSELECT\b(.*?)(?=\bFROM\b)/is, (match, selectPart) => {
-      const columns = [];
-      let buffer = '';
-      let parenCount = 0;
-
-      for (let i = 0; i < selectPart.length; i++) {
-        const char = selectPart[i];
-
-        if (char === ',' && parenCount === 0) {
-          columns.push(buffer.trim());
-          buffer = '';
-        } else {
-          if (char === '(') parenCount++;
-          if (char === ')') parenCount--;
-          buffer += char;
-        }
-      }
-      if (buffer) columns.push(buffer.trim());
-
-      const processed = columns.map((col, index) => {
-        if (/\bAS\b\s+\w+$/i.test(col)) return col;
-
-        const functionMatch = col.match(/^(\w+)\s*\(/i);
-        if (!functionMatch) return col;
-
-        const funcName = functionMatch[1].toUpperCase();
-        if (!MYSQL_FUNCTIONS.has(funcName)) return col;
-
-        return `${col} AS property${index + 1}`;
-      });
-
-      return `SELECT ${processed.join(', ')} `;
-    });
-  }
-
-
   extractTableAliases(sql: string): Map<string, string> {
     const tableAliasMap = new Map<string, string>();
-    const aliasPattern = /\b(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s+|$|\n|WHERE|JOIN|ON|ORDER|GROUP|HAVING|LIMIT)/gi;
+    const aliasPattern =
+      /\b(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s+|$|\n|WHERE|JOIN|ON|ORDER|GROUP|HAVING|LIMIT)/gi;
 
     let match;
     while ((match = aliasPattern.exec(sql)) !== null) {
@@ -225,68 +212,6 @@ export class SQLFormatter {
     return tableAliasMap;
   }
 
-  private capitalize(str: string): string {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
-
-  private toCamelCase(str: string): string {
-    return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-  }
-
-  private readonly FUNCTION_TYPE_MAP: Record<string, string> = {
-    'CONCAT': 'string',
-    'CONCAT_WS': 'string',
-    'LOWER': 'string',
-    'UPPER': 'string',
-    'SUBSTRING': 'string',
-    'TRIM': 'string',
-    'LTRIM': 'string',
-    'RTRIM': 'string',
-    'LEFT': 'string',
-    'RIGHT': 'string',
-    'LPAD': 'string',
-    'RPAD': 'string',
-    'REPLACE': 'string',
-    'REGEXP_REPLACE': 'string',
-
-    'ABS': 'number',
-    'ROUND': 'number',
-    'CEILING': 'number',
-    'CEIL': 'number',
-    'FLOOR': 'number',
-    'RAND': 'number',
-    'SIGN': 'number',
-    'TRUNCATE': 'number',
-    'SUM': 'number',
-    'AVG': 'number',
-    'COUNT': 'number',
-    'MIN': 'number',
-    'MAX': 'number',
-
-    'NOW': 'Date',
-    'CURDATE': 'Date',
-    'CURTIME': 'string',
-    'DATE': 'Date',
-    'DATE_FORMAT': 'string',
-    'DATE_ADD': 'Date',
-    'DATE_SUB': 'Date',
-    'DATEDIFF': 'number',
-    'DAY': 'number',
-    'MONTH': 'number',
-    'YEAR': 'number',
-    'HOUR': 'number',
-    'MINUTE': 'number',
-    'SECOND': 'number',
-    'ADDDATE': 'Date',
-    'SUBDATE': 'Date',
-
-    'JSON_EXTRACT': 'any',
-    'JSON_OBJECT': 'Record<string, any>',
-    'JSON_ARRAY': 'any[]',
-    'JSON_CONTAINS': 'boolean',
-    'JSON_KEYS': 'string[]'
-  };
-
   isSqlFunction(expression: string): boolean {
     const functionRegex = /^\s*(\w+)\s*\(/i;
     const match = functionRegex.exec(expression);
@@ -298,9 +223,9 @@ export class SQLFormatter {
   }
 
   extractNestedFunctions(expression: string): {
-    functions: string[],
-    outerFunction: string | null,
-    returnType: string
+    functions: string[];
+    outerFunction: string | null;
+    returnType: string;
   } {
     const functions: string[] = [];
     const functionRegex = /(\w+)\s*\(((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*)\)/g;
@@ -346,6 +271,142 @@ export class SQLFormatter {
     }
 
     return 'string';
+  }
+
+  private cleanupOperatorAliases(sql: string): string {
+    let result = sql;
+
+    for (const op of this.SQL_OPERATORS) {
+      result = result
+        .replace(new RegExp(`(\\w+\\.\\w+)\\s+AS\\s+\\w+\\s*${op}`, 'gi'), `$1 ${op}`)
+        .replace(new RegExp(`${op}\\s*(\\w+\\.\\w+)\\s+AS\\s+\\w+`, 'gi'), `${op} $1`);
+    }
+
+    return result.replace(/(\w+\.\w+)\s+AS\s+\w+\s*=\s*\?/gi, '$1 = ?');
+  }
+
+  private getTableAliasesFromSql(sql: string): Array<{ table: string; alias: string }> {
+    const tableAliases = [];
+    const aliasPattern = /\b(FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s|$|\n)/gi;
+    let match;
+
+    while ((match = aliasPattern.exec(sql)) !== null) {
+      const [, , tableName, alias] = match;
+
+      if (this.isValidTableAlias(tableName.trim(), alias.trim())) {
+        tableAliases.push({ table: tableName.trim(), alias: alias.trim() });
+      }
+    }
+
+    return tableAliases;
+  }
+
+  private isValidTableAlias(tableName: string, alias: string): boolean {
+    return Boolean(
+      tableName &&
+        alias &&
+        tableName !== alias &&
+        !this.SQL_RESERVED_WORDS.has(tableName.toLowerCase()) &&
+        !this.SQL_RESERVED_WORDS.has(alias.toLowerCase())
+    );
+  }
+
+  private replaceTableReferencesInSelect(
+    sql: string,
+    tableAliases: Array<{ table: string; alias: string }>
+  ): string {
+    return sql.replace(/\bSELECT\b(.*?)(?=\bFROM\b)/gis, (_, selectColumns) => {
+      let newSelectColumns = selectColumns;
+
+      for (const { table, alias } of tableAliases) {
+        newSelectColumns = newSelectColumns.replace(
+          new RegExp(`\\b${table}\\.`, 'gi'),
+          `${alias}.`
+        );
+      }
+
+      return `SELECT${newSelectColumns}`;
+    });
+  }
+
+  private buildFieldsWithAliases(
+    returnFields: ReturnField[],
+    tableAliases: Array<{ table: string; alias: string }>
+  ): string[] {
+    return returnFields.map(field => {
+      if (!field.sourceField) {
+        throw new Error(`Missing source field in return field: ${JSON.stringify(field)}`);
+      }
+
+      let tableAlias: string | undefined;
+
+      if (field.sourceTable) {
+        const foundAlias = tableAliases.find(entry => entry.table === field.sourceTable);
+        tableAlias = foundAlias ? foundAlias.alias : field.sourceTable;
+      }
+
+      const isFunction = /\w+\s*\(.*\)/.test(field.sourceField);
+      const fieldExpression = isFunction
+        ? field.sourceField
+        : `${tableAlias ? `${tableAlias}.` : ''}${field.sourceField}`;
+
+      return field.alias ? `${fieldExpression} AS "${field.alias}"` : fieldExpression;
+    });
+  }
+
+  private extractFromClause(sql: string): string {
+    const fromIndex = sql.toUpperCase().indexOf('FROM');
+    return fromIndex !== -1 ? sql.slice(fromIndex).trim() : '';
+  }
+
+  private addMissingAliasesToFunctions(sql: string): string {
+    return sql.replace(/\bSELECT\b(.*?)(?=\bFROM\b)/is, (match, selectPart) => {
+      const columns = [];
+      let buffer = '';
+      let parenCount = 0;
+
+      for (let i = 0; i < selectPart.length; i++) {
+        const char = selectPart[i];
+
+        if (char === ',' && parenCount === 0) {
+          columns.push(buffer.trim());
+          buffer = '';
+        } else {
+          if (char === '(') parenCount++;
+          if (char === ')') parenCount--;
+          buffer += char;
+        }
+      }
+      if (buffer) columns.push(buffer.trim());
+
+      const processed = columns.map((col, index) => {
+        if (/\bAS\b\s+(?:"[^"]+"|'[^']+'|\w+)$/i.test(col)) {
+          return col;
+        }
+
+        if (/\bAS\b\s+(?:"[^"]+"|'[^']+'|\w+)\s+AS\b/i.test(col)) {
+          return col.replace(/(\bAS\b\s+(?:"[^"]+"|'[^']+'|\w+))\s+AS\b.*$/i, '$1');
+        }
+
+        const functionMatch = col.match(/^(\w+)\s*\(/i);
+        if (!functionMatch) return col;
+
+        const funcName = functionMatch[1].toUpperCase();
+        if (!MYSQL_FUNCTIONS.has(funcName)) return col;
+
+        return `${col} AS property${index + 1}`;
+      });
+
+      return `SELECT ${processed.join(', ')} `;
+    });
+  }
+
+  private capitalize(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  private toCamelCase(str: string): string {
+    return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
   }
 
   // Adicione este novo método para verificar corretamente palavras reservadas

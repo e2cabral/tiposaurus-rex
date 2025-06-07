@@ -207,7 +207,7 @@ export class SQLParserImpl implements SQLParser {
     const mainPart = typeParts[0].trim();
     let type = typeParts.length > 1 ? typeParts[1].trim() : undefined;
 
-    const aliasParts = mainPart.split(' as ');
+    const aliasParts = mainPart.split(' to ');
     const fieldPart = aliasParts[0].trim();
     const alias = aliasParts.length > 1 ? aliasParts[1].trim() : undefined;
 
