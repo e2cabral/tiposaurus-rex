@@ -253,3 +253,4 @@ See [CONTRIBUTING.md](https://github.com/e2cabral/tiposaurus-rex/blob/main/CONTR
 ## License
 
 MIT. See [LICENSE](https://github.com/e2cabral/tiposaurus-rex/blob/main/LICENSE).
+
