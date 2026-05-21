@@ -27,9 +27,11 @@ export interface QueryResult {
 export interface DatabaseConnector {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  updateConfig(config: DatabaseConfig): Promise<void>;
   getConnection(): any;
   describeTable(tableName: string): Promise<TableMetadata>;
   analyzeQuery(query: string): Promise<QueryResult>;
   analyzeQueryWithFields(query: string, fields: ReturnField[]): Promise<QueryResult>;
+  getQueryMetadata(query: string, params?: any[]): Promise<ColumnMetadata[]>;
   execute<T>(query: string, params?: any[]): Promise<T[]>;
 }

@@ -1,3 +1,4 @@
+import { injectable } from 'inversify';
 import { QueryParameter, ReturnField } from '../core/domain/interfaces/template.interface.js';
 
 export interface MatcherResult {
@@ -9,85 +10,77 @@ export interface MatcherResult {
   returnFunction?: { info: string; fields: ReturnField[] };
 }
 
+@injectable()
 export class ParameterMatcher {
-  private static description = {
-    matcher: /--\s*@description(?:\s*:)?/,
-    action: (line: string): MatcherResult => {
-      return {
-        description: line.replace(/--\s*@description(?:\s*:)?\s*/, '').trim(),
-      };
+  private readonly matchers = [
+    {
+      id: 'description',
+      regex: /@description(?:\s*:)?/,
+      handler: (line: string): MatcherResult => ({
+        description: this.extractValue(line, /@description(?:\s*:)?/),
+      }),
     },
-  };
-
-  private static params = {
-    matcher: /--\s*@param(?:\s*:)?/,
-    action: (line: string): MatcherResult => {
-      const paramPart = line.replace(/--\s*@param(?:\s*:)?\s*/, '').trim();
-      const [paramName, paramType] = paramPart.split(':');
-
-      return {
-        param: {
-          name: paramName.trim(),
-          type: paramType ? paramType.trim() : 'any',
-        },
-      };
+    {
+      id: 'param',
+      regex: /@param(?:\s*:)?/,
+      handler: (line: string): MatcherResult => {
+        const value = this.extractValue(line, /@param(?:\s*:)?/);
+        const [name, type] = value.split(':');
+        return {
+          param: {
+            name: name.trim(),
+            type: type ? type.trim() : 'any',
+          },
+        };
+      },
     },
-  };
-
-  private static returnType = {
-    matcher: /--\s*@returnType(?:\s*:)?/,
-    action: (line: string): MatcherResult => {
-      return {
-        returnType: line.replace(/--\s*@returnType(?:\s*:)?\s*/, '').trim(),
-      };
+    {
+      id: 'returnType',
+      regex: /@returnType(?:\s*:)?/,
+      handler: (line: string): MatcherResult => ({
+        returnType: this.extractValue(line, /@returnType(?:\s*:)?/),
+      }),
     },
-  };
-
-  private static returnSingle = {
-    matcher: /--\s*@returnSingle(?:\s*:)?/,
-    action: (line: string): MatcherResult => {
-      const value = line.replace(/--\s*@returnSingle(?:\s*:)?\s*/, '').trim();
-      return {
-        returnSingle: value.toLowerCase() === 'true',
-      };
+    {
+      id: 'returnSingle',
+      regex: /@returnSingle(?:\s*:)?/,
+      handler: (line: string): MatcherResult => ({
+        returnSingle: this.extractValue(line, /@returnSingle(?:\s*:)?/).toLowerCase() === 'true',
+      }),
     },
-  };
-
-  private static return = {
-    matcher: /--\s*@return(?:\s*:)?/,
-    action: (line: string, fields: ReturnField[]): MatcherResult => {
-      const info = line.replace(/--\s*@return(?:\s*:)?\s*/, '').trim();
-      return {
-        returnField: { info, fields },
-      };
+    {
+      id: 'return',
+      regex: /@return(?:\s*:)?/,
+      handler: (line: string, fields: ReturnField[]): MatcherResult => ({
+        returnField: { info: this.extractValue(line, /@return(?:\s*:)?/), fields },
+      }),
     },
-  };
-
-  private static returnFunction = {
-    matcher: /--\s*@returnFunction(?:\s*:)?/,
-    action: (line: string, fields: ReturnField[]): MatcherResult => {
-      const info = line.replace(/--\s*@returnFunction(?:\s*:)?\s*/, '').trim();
-      return {
-        returnFunction: { info, fields },
-      };
+    {
+      id: 'returnFunction',
+      regex: /@returnFunction(?:\s*:)?/,
+      handler: (line: string, fields: ReturnField[]): MatcherResult => ({
+        returnFunction: { info: this.extractValue(line, /@returnFunction(?:\s*:)?/), fields },
+      }),
     },
-  };
-
-  static matchers = [
-    ParameterMatcher.description,
-    ParameterMatcher.params,
-    ParameterMatcher.returnType,
-    ParameterMatcher.returnSingle,
-    ParameterMatcher.return,
-    ParameterMatcher.returnFunction,
   ];
 
-  static processLine(line: string, returnFields?: ReturnField[]): MatcherResult | null {
+  processLine(line: string, returnFields: ReturnField[]): MatcherResult | null {
+    const trimmed = line.trim();
+    
+    // Check if the line contains any of our known annotations
     for (const matcher of this.matchers) {
-      if (line.match(matcher.matcher)) {
-        return matcher.action(line, returnFields || []);
+      if (matcher.regex.test(trimmed)) {
+        return matcher.handler(trimmed, returnFields);
       }
     }
+
     return null;
+  }
+
+  private extractValue(line: string, regex: RegExp): string {
+    return line
+      .replace(new RegExp(`.*${regex.source}\\s*`), '')
+      .replace(/\*\/$/, '')
+      .trim();
   }
 }

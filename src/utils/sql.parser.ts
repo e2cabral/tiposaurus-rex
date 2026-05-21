@@ -7,11 +7,14 @@ import {
 } from '../core/domain/interfaces/template.interface.js';
 import { SQLFormatter } from './sql-formatter.js';
 import { ParameterMatcher } from './parameter.matcher.js';
+import { TypeInferer } from './type-inferer.js';
 
 @injectable()
 export class SQLParserImpl implements SQLParser {
   constructor(
     @inject(SQLFormatter) private sqlFormatter: SQLFormatter,
+    @inject(TypeInferer) private typeInferer: TypeInferer,
+    @inject(ParameterMatcher) private parameterMatcher: ParameterMatcher,
     private options: SQLParserOptions = {}
   ) {
     this.options = {
@@ -21,12 +24,9 @@ export class SQLParserImpl implements SQLParser {
   }
 
   parseFile(content: string): QueryDefinition[] {
-    console.log('Analisando conteúdo SQL:');
-    console.log(content.substring(0, 200) + '...');
-
     const queries: QueryDefinition[] = [];
 
-    const nameRegex = /--\s*@name(?:\s*:)?\s+([^\r\n]+)/g;
+    const nameRegex = /(?:--|\/\*)\s*@name(?:\s*:)?\s+([^\r\n*/]+)/g;
     let nameMatch;
     const blocks = [];
 
@@ -44,13 +44,15 @@ export class SQLParserImpl implements SQLParser {
         ? content.substring(block.startIndex, nextBlock.startIndex)
         : content.substring(block.startIndex);
 
-      const queryDef = this.parseQueryBlock(block.name, blockContent);
+      // Extract aliases for this specific block to resolve them in return fields
+      const tableAliases = this.extractTableAliases(blockContent);
+
+      const queryDef = this.parseQueryBlock(block.name, blockContent, tableAliases);
       if (queryDef) {
         queries.push(queryDef);
       }
     }
 
-    console.log(`Total de consultas encontradas: ${queries.length}`);
     return queries;
   }
 
@@ -102,7 +104,7 @@ export class SQLParserImpl implements SQLParser {
     const tableAliasMap = new Map<string, string>();
 
     const patterns = [
-      /\b(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s+|$|\n|WHERE|JOIN|ON|ORDER|GROUP|HAVING|LIMIT)/gi,
+      /\b(?:FROM|JOIN)\s+(\w+)(?:\s+(?:AS\s+)?|\s+)(\w+)(?=\s+|$|\n|WHERE|JOIN|ON|ORDER|GROUP|HAVING|LIMIT|;)/gi,
     ];
 
     for (const pattern of patterns) {
@@ -120,9 +122,11 @@ export class SQLParserImpl implements SQLParser {
     return tableAliasMap;
   }
 
-  private parseQueryBlock(name: string, blockContent: string): QueryDefinition | null {
-    console.log(`Processando bloco para consulta: ${name}`);
-
+  private parseQueryBlock(
+    name: string,
+    blockContent: string,
+    tableAliases: Map<string, string> = new Map()
+  ): QueryDefinition | null {
     const lines = blockContent.split('\n');
 
     let description = '';
@@ -133,50 +137,59 @@ export class SQLParserImpl implements SQLParser {
     const sqlLines: string[] = [];
 
     let foundSql = false;
+    let inBlockComment = false;
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
+    for (let i = 0; i < lines.length; i++) {
+      const originalLine = lines[i];
+      const line = originalLine.trim();
 
       if (!line) continue;
 
-      if (!line.startsWith('--')) {
-        foundSql = true;
-        sqlLines.push(lines[i]);
-        continue;
+      if (line.startsWith('/*')) {
+        inBlockComment = true;
       }
 
-      if (foundSql) {
-        if (line.match(/--\s*@name(?:\s*:)?/)) {
+      const isLineComment = line.startsWith('--');
+      const isComment = isLineComment || inBlockComment;
+
+      if (!isComment) {
+        foundSql = true;
+        sqlLines.push(originalLine);
+      } else {
+        if (foundSql && line.includes('@name')) {
           break;
         }
+
+        const result = this.parameterMatcher.processLine(line, returnFields);
+
+        if (result) {
+          if (result.description) {
+            description = result.description;
+          }
+          if (result.param) {
+            params.push(result.param);
+          }
+          if (result.returnType) {
+            returnType = result.returnType;
+          }
+          if (result.returnSingle !== undefined) {
+            returnSingle = result.returnSingle;
+          }
+          if (result.returnField) {
+            this.parseReturnField(result.returnField.info, result.returnField.fields, tableAliases);
+          }
+          if (result.returnFunction) {
+            this.parseReturnFunction(result.returnFunction.info, result.returnFunction.fields);
+          }
+        }
       }
 
-      const result = ParameterMatcher.processLine(line, returnFields);
-
-      if (result) {
-        if (result.description) {
-          description = result.description;
-        }
-        if (result.param) {
-          params.push(result.param);
-        }
-        if (result.returnType) {
-          returnType = result.returnType;
-        }
-        if (result.returnSingle !== undefined) {
-          returnSingle = result.returnSingle;
-        }
-        if (result.returnField) {
-          this.parseReturnField(result.returnField.info, result.returnField.fields);
-        }
-        if (result.returnFunction) {
-          this.parseReturnFunction(result.returnFunction.info, result.returnFunction.fields);
-        }
+      if (line.includes('*/')) {
+        inBlockComment = false;
       }
     }
 
     if (sqlLines.length === 0) {
-      console.log(`Nenhum SQL encontrado para a consulta ${name}`);
       return null;
     }
 
@@ -200,9 +213,11 @@ export class SQLParserImpl implements SQLParser {
     };
   }
 
-  private parseReturnField(fieldInfo: string, returnFields: ReturnField[]): void {
-    console.log(`Processando campo: ${fieldInfo}`);
-
+  private parseReturnField(
+    fieldInfo: string,
+    returnFields: ReturnField[],
+    tableAliases: Map<string, string>
+  ): void {
     const typeParts = fieldInfo.split(':');
     const mainPart = typeParts[0].trim();
     let type = typeParts.length > 1 ? typeParts[1].trim() : undefined;
@@ -227,30 +242,17 @@ export class SQLParserImpl implements SQLParser {
       if (fieldParts.length > 1) {
         sourceTable = fieldParts[0];
         sourceField = fieldParts[1];
+
+        // Resolve table alias
+        if (tableAliases.has(sourceTable)) {
+          sourceTable = tableAliases.get(sourceTable);
+        }
       } else {
         sourceField = fieldPart;
       }
 
-      if (!type) {
-        if (sourceField === 'id' || sourceField.endsWith('_id') || sourceField.includes('Id')) {
-          type = 'number';
-        } else if (
-          sourceField.includes('date') ||
-          sourceField.includes('time') ||
-          sourceField.includes('Date')
-        ) {
-          type = 'Date';
-        } else if (sourceField.includes('is_') || sourceField.includes('has_')) {
-          type = 'boolean';
-        } else {
-          type = 'string';
-        }
-      }
+      type = this.typeInferer.infer(sourceField, type);
     }
-
-    console.log(
-      `Campo processado: campo=${sourceField}, tabela=${sourceTable}, alias=${alias}, tipo=${type}, isFunction=${isSqlFunction}`
-    );
 
     returnFields.push({
       sourceField,
@@ -261,34 +263,25 @@ export class SQLParserImpl implements SQLParser {
     });
   }
 
-  private parseReturnFunction(fieldInfo: string, returnFields: ReturnField[]): void {
-    console.log(`Processando função SQL personalizada: ${fieldInfo}`);
-
-    let alias: string | undefined;
-    let expression: string;
+  private parseReturnFunction(
+    fieldInfo: string,
+    returnFields: ReturnField[]
+  ): void {
     let type: string | undefined;
 
     const [left, right] = fieldInfo.split(':');
     if (!right) {
-      console.warn(`Formato inválido para @returnFunction: ${fieldInfo}`);
       return;
     }
 
-    alias = left.trim();
-    expression = right.trim();
+    const alias = left.trim();
+    const expression = right.trim();
 
     if (this.sqlFormatter.isSqlFunction(expression)) {
       type = this.sqlFormatter.determineSqlExpressionType(expression);
     }
 
-    if (!type) {
-      if (alias.toLowerCase().includes('id')) type = 'number';
-      else if (alias.toLowerCase().includes('date') || alias.toLowerCase().includes('time'))
-        type = 'Date';
-      else if (alias.toLowerCase().includes('is_') || alias.toLowerCase().includes('has_'))
-        type = 'boolean';
-      else type = 'string';
-    }
+    type = this.typeInferer.infer(alias, type);
 
     returnFields.push({
       sourceField: expression,
@@ -297,7 +290,5 @@ export class SQLParserImpl implements SQLParser {
       type,
       isFunction: true,
     });
-
-    console.log(`Função processada: alias=${alias}, expr=${expression}, tipo=${type}`);
   }
 }

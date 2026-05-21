@@ -1,6 +1,6 @@
 export const interfaceTemplate = `/**
- * Interface gerada para a tabela: {{tableName}}
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * Interface generated for table: {{tableName}}
+ * @generated This file was automatically generated - DO NOT EDIT
  * @timestamp {{timestamp}}
  */
 export interface {{pascalCase interfaceName}} {
@@ -15,14 +15,14 @@ export const queryTemplate = `import mysql from "mysql2/promise";
 /**
 * {{query.name}}
 * {{#if query.description}}{{query.description}}{{/if}}
-* @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+* @generated This file was automatically generated - DO NOT EDIT
 * @timestamp {{timestamp}}
 */
 
 {{#if query.returnFields}}
 export interface {{pascalCase query.returnType}} {
 {{#each query.returnFields}}
-  {{camelCase alias}}{{#if nullable}}?{{/if}}: {{type}}; {{#if isFunction}}// Função SQL{{/if}}
+  {{camelCase alias}}{{#if nullable}}?{{/if}}: {{type}}; {{#if isFunction}}// SQL Function{{/if}}
 {{/each}}
 }
 {{/if}}
@@ -37,10 +37,10 @@ export type {{pascalCase query.name}}Result = {{#if query.returnSingle}}{{query.
 export const {{camelCase query.name}}Query = \`{{{query.sql}}}\`;
 
 /**
-* Executa a consulta {{query.name}}
-* @param params Parâmetros da consulta
-* @param db Conexão opcional com o banco de dados, se não fornecida será obtida automaticamente
-* @returns Resultado da consulta
+* Executes query {{query.name}}
+* @param params Query parameters
+* @param db mysql2 connection configured with namedPlaceholders: true
+* @returns Query result
 */
 export async function {{camelCase query.name}}(
 db: mysql.Connection,
@@ -52,7 +52,7 @@ return rows as unknown as {{pascalCase query.name}}Result{{#unless query.returnS
 `;
 
 export const indexTemplate = `/**
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * @generated This file was automatically generated - DO NOT EDIT
  * @timestamp {{timestamp}}
  */
 
@@ -64,8 +64,8 @@ export const queryExecutors = {
 `;
 
 export const dbConnectionTemplate = `/**
- * Conexão com o banco de dados
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * Database connection
+ * @generated This file was automatically generated - DO NOT EDIT
  * @timestamp {{timestamp}}
  */
 import fs from 'fs/promises';
@@ -73,7 +73,7 @@ import path from 'path';
 import mysql from 'mysql2/promise';
 
 /**
- * Configuração do banco de dados
+ * Database configuration
  */
 export interface DatabaseConfig {
   host: string;
@@ -84,7 +84,7 @@ export interface DatabaseConfig {
 }
 
 /**
- * Configuração completa da aplicação
+ * Full application configuration
  */
 export interface AppConfig {
   db: DatabaseConfig;
@@ -92,18 +92,18 @@ export interface AppConfig {
 }
 
 /**
- * Conexão com o banco de dados
+ * Database connection
  */
 export interface DatabaseConnection {
   execute<T>(query: string, params?: any[]): Promise<T>;
 }
 
-// Singleton da conexão com o banco de dados
+// Database connection singleton
 let dbConnection: DatabaseConnection | null = null;
 
 /**
- * Carrega o arquivo de configuração tiposaurus.config.json
- * @returns Configuração da aplicação
+ * Loads the tiposaurus.config.json configuration file
+ * @returns Application configuration
  */
 async function loadConfig(): Promise<AppConfig> {
   try {
@@ -113,23 +113,23 @@ async function loadConfig(): Promise<AppConfig> {
   } catch (error) {
     if (error instanceof Error) {
       if ((error as any).code === 'ENOENT') {
-        throw new Error('Arquivo tiposaurus.config.json não encontrado. Execute "tiposaurus init" para criá-lo.');
+        throw new Error('tiposaurus.config.json file not found. Run "tiposaurus init" to create it.');
       }
-      throw new Error('Erro ao carregar configuração: ' + error.message);
+      throw new Error('Error loading configuration: ' + error.message);
     }
-    throw new Error('Erro desconhecido ao carregar configuração');
+    throw new Error('Unknown error while loading configuration');
   }
 }
 
 /**
- * Cria uma conexão com o banco de dados
- * @returns Conexão com o banco de dados
+ * Creates a database connection
+ * @returns Database connection
  */
 export async function createDatabaseConnection(): Promise<DatabaseConnection> {
   const config = await loadConfig();
   
   if (!config.db) {
-    throw new Error('Configuração de banco de dados não encontrada no arquivo tiposaurus.config.json');
+    throw new Error('Database configuration not found in tiposaurus.config.json file');
   }
   
   const connection = await mysql.createConnection({
@@ -149,8 +149,8 @@ export async function createDatabaseConnection(): Promise<DatabaseConnection> {
 }
 
 /**
- * Obtém a conexão atual com o banco de dados ou cria uma nova se não existir
- * @returns Conexão com o banco de dados
+ * Gets the current database connection or creates a new one if it doesn't exist
+ * @returns Database connection
  */
 export async function getConnection(): Promise<DatabaseConnection> {
   if (!dbConnection) {

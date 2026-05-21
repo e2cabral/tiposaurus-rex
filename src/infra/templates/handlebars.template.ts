@@ -16,7 +16,7 @@ export class HandlebarsTemplateEngine implements TemplateEngine {
     this.handlebars.registerPartial(name, template);
   }
 
-  registerHelper(name: string, fn: Function): void {
+  registerHelper(name: string, fn: (...args: unknown[]) => unknown): void {
     this.handlebars.registerHelper(name, fn as any);
   }
 

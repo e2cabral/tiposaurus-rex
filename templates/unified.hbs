@@ -1,7 +1,7 @@
 {{#each tables}}
 /**
- * Interface gerada para a tabela: {{tableName}}
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * Interface generated for table: {{tableName}}
+ * @generated This file was automatically generated - DO NOT EDIT
  * @timestamp {{../timestamp}}
  */
 export interface {{pascalCase interfaceName}} {
@@ -14,8 +14,8 @@ export interface {{pascalCase interfaceName}} {
 
 {{#if customInterfaces}}
 /**
- * Interfaces personalizadas
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * Custom interfaces
+ * @generated This file was automatically generated - DO NOT EDIT
  * @timestamp {{timestamp}}
  */
 {{#each customInterfaces}}
@@ -28,7 +28,7 @@ export interface {{pascalCase interfaceName}} {
 /**
  * {{name}}
  * {{#if description}}{{description}}{{/if}}
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * @generated This file was automatically generated - DO NOT EDIT
  * @timestamp {{../timestamp}}
  */
 
@@ -43,10 +43,10 @@ export type {{pascalCase name}}Result = {{returnType}};
 export const {{camelCase name}}Query = `{{{sql}}}`;
 
 /**
- * Executa a consulta {{name}}
- * @param db Conexão com o banco de dados
- * @param params Parâmetros da consulta
- * @returns Resultado da consulta
+ * Executes query {{name}}
+ * @param db Database connection
+ * @param params Query parameters
+ * @returns Query result
  */
 export async function {{camelCase name}}(
   db: { execute<T>(query: string, params?: any[]): Promise<T[]> },
@@ -61,8 +61,8 @@ export async function {{camelCase name}}(
 {{/each}}
 
 /**
- * Objeto com todas as funções de consulta
- * @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+ * Object containing all query functions
+ * @generated This file was automatically generated - DO NOT EDIT
  * @timestamp {{timestamp}}
  */
 export const queryExecutors = {

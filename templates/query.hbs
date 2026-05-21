@@ -3,14 +3,14 @@ import mysql from "mysql2/promise";
 /**
 * {{query.name}}
 * {{#if query.description}}{{query.description}}{{/if}}
-* @generated Este arquivo foi gerado automaticamente - NÃO EDITAR
+* @generated This file was automatically generated - DO NOT EDIT
 * @timestamp {{timestamp}}
 */
 
 {{#if query.returnFields}}
 export interface {{pascalCase query.returnType}} {
 {{#each query.returnFields}}
-  {{camelCase alias}}{{#if nullable}}?{{/if}}: {{type}}; {{#if isFunction}}// Função SQL{{/if}}
+  {{camelCase alias}}{{#if nullable}}?{{/if}}: {{type}}; {{#if isFunction}}// SQL Function{{/if}}
 {{/each}}
 }
 {{/if}}
@@ -25,10 +25,10 @@ export type {{pascalCase query.name}}Result = {{#if query.returnSingle}}{{query.
 export const {{camelCase query.name}}Query = `{{{query.sql}}}`;
 
 /**
-* Executa a consulta {{query.name}}
-* @param params Parâmetros da consulta
-* @param db Conexão opcional com o banco de dados, se não fornecida será obtida automaticamente
-* @returns Resultado da consulta
+* Executes query {{query.name}}
+* @param params Query parameters
+* @param db Optional database connection, if not provided it will be obtained automatically
+* @returns Query result
 */
 export async function {{camelCase query.name}}(
 db: mysql.Connection,

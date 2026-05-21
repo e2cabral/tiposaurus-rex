@@ -1,46 +1,53 @@
-import { injectable } from 'inversify';
-import fs from 'fs/promises';
+import { inject, injectable } from 'inversify';
 import path from 'path';
 import {AppConfig, AppConfigSchema} from "../domain/models/config.model.js";
+import { FileSystemInterface } from '../domain/interfaces/file-system.interface.js';
+import { ConfigError } from '../domain/errors/app-error.js';
 
 @injectable()
 export class ConfigService {
+  constructor(
+    @inject('FileSystem') private fs: FileSystemInterface
+  ) {}
+
   async loadConfig(configPath: string): Promise<AppConfig> {
     try {
       const resolvedPath = path.resolve(process.cwd(), configPath);
-      const configFile = await fs.readFile(resolvedPath, 'utf-8');
+      const configFile = await this.fs.readFile(resolvedPath, 'utf-8');
       const rawConfig = JSON.parse(configFile);
 
       const result = AppConfigSchema.safeParse(rawConfig);
 
       if (!result.success) {
         const formattedError = result.error.format();
-        throw new Error(
-          `Configuração inválida: ${JSON.stringify(formattedError, null, 2)}`
+        throw new ConfigError(
+          `Invalid configuration: ${JSON.stringify(formattedError, null, 2)}`
         );
       }
 
       return result.data;
     } catch (error) {
+      if (error instanceof ConfigError) throw error;
+      
       if (error instanceof Error) {
         if ((error as any).code === 'ENOENT') {
-          throw new Error(`Arquivo de configuração não encontrado: ${configPath}`);
+          throw new ConfigError(`Configuration file not found: ${configPath}`);
         }
-        throw new Error(`Erro ao carregar configuração: ${error.message}`);
+        throw new ConfigError(`Error loading configuration: ${error.message}`);
       }
-      throw new Error('Erro desconhecido ao carregar configuração');
+      throw new ConfigError('Unknown error while loading configuration');
     }
   }
 
   async saveConfig(configPath: string, config: AppConfig): Promise<void> {
     try {
       const resolvedPath = path.resolve(process.cwd(), configPath);
-      await fs.writeFile(resolvedPath, JSON.stringify(config, null, 2));
+      await this.fs.writeFile(resolvedPath, JSON.stringify(config, null, 2));
     } catch (error) {
       if (error instanceof Error) {
-        throw new Error(`Erro ao salvar configuração: ${error.message}`);
+        throw new ConfigError(`Error saving configuration: ${error.message}`);
       }
-      throw new Error('Erro desconhecido ao salvar configuração');
+      throw new ConfigError('Unknown error while saving configuration');
     }
   }
 }

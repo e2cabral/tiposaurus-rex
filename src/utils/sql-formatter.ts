@@ -118,6 +118,9 @@ export class SQLFormatter {
     JSON_ARRAY: 'any[]',
     JSON_CONTAINS: 'boolean',
     JSON_KEYS: 'string[]',
+    COALESCE: 'any',
+    IFNULL: 'any',
+    IF: 'any',
   };
 
   formatSqlAliases(sql: string): string {
@@ -137,8 +140,8 @@ export class SQLFormatter {
     );
 
     let result = fixImplicitAliases.replace(
-      /(\w+(?:\.\w+)?\s+AS\s+)(\w+)_(\w+)(?=[\s,)])/gi,
-      (_, prefix, first, second) => `${prefix}${first}${this.capitalize(second)}`
+      /(\w+(?:\.\w+)?\s+AS\s+)(\w+(?:_\w+)+)(?=[\s,)])/gi,
+      (_, prefix, alias) => `${prefix}${this.toCamelCase(alias)}`
     );
 
     result = result.replace(
@@ -179,9 +182,24 @@ export class SQLFormatter {
   }
 
   processQueryForTypeScript(sql: string): string {
+    const strippedSql = this.stripAnnotations(sql);
     return this.fixInvalidSQLSyntax(
-      this.formatSqlAliases(this.addMissingAliasesToFunctions(this.replaceTablesWithAliases(sql)))
+      this.formatSqlAliases(
+        this.addMissingAliasesToFunctions(this.replaceTablesWithAliases(strippedSql))
+      )
     );
+  }
+
+  private stripAnnotations(sql: string): string {
+    return sql
+      .replace(/(?:--|\/\*)\s*@name(?:\s*:)?\s+([^\r\n\*\/]+)(?:\s*\*\/)?/gi, '')
+      .replace(/(?:--|\/\*)\s*@description(?:\s*:)?\s+([^\r\n\*\/]+)(?:\s*\*\/)?/gi, '')
+      .replace(/(?:--|\/\*)\s*@param(?:\s*:)?\s+([^\r\n\*\/]+)(?:\s*\*\/)?/gi, '')
+      .replace(/(?:--|\/\*)\s*@returnType(?:\s*:)?\s+([^\r\n\*\/]+)(?:\s*\*\/)?/gi, '')
+      .replace(/(?:--|\/\*)\s*@returnSingle(?:\s*:)?\s+([^\r\n\*\/]+)(?:\s*\*\/)?/gi, '')
+      .replace(/(?:--|\/\*)\s*@returnFunction(?:\s*:)?\s+([^\r\n\*\/]+)(?:\s*\*\/)?/gi, '')
+      .replace(/(?:--|\/\*)\s*@return(?:\s*:)?\s+([^\r\n\*\/]+)(?:\s*\*\/)?/gi, '')
+      .trim();
   }
 
   applyReturnFieldAliases(sql: string, returnFields: ReturnField[] | undefined): string {
@@ -234,7 +252,7 @@ export class SQLFormatter {
     functionRegex.lastIndex = 0;
 
     while ((match = functionRegex.exec(expression)) !== null) {
-      const [fullMatch, funcName, args] = match;
+      const [fullMatch, , args] = match;
       functions.push(fullMatch);
 
       this.extractNestedFunctions(args);
@@ -254,7 +272,7 @@ export class SQLFormatter {
 
   determineSqlExpressionType(expression: string): string {
     if (this.isSqlFunction(expression)) {
-      const { outerFunction, returnType } = this.extractNestedFunctions(expression);
+      const { returnType } = this.extractNestedFunctions(expression);
       return returnType;
     }
 

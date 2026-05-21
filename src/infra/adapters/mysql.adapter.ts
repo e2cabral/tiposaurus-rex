@@ -1,56 +1,67 @@
 import { injectable, inject } from 'inversify';
 import mysql from 'mysql2/promise';
-import { DatabaseConnector, DatabaseConfig, TableMetadata, QueryResult, ColumnMetadata } from '../../core/domain/interfaces/database.interface.js';
-import {ReturnField} from "../../core/domain/interfaces/template.interface.js";
+import {
+  DatabaseConnector,
+  DatabaseConfig,
+  TableMetadata,
+  QueryResult,
+  ColumnMetadata,
+} from '../../core/domain/interfaces/database.interface.js';
+import { ReturnField } from '../../core/domain/interfaces/template.interface.js';
+import { DatabaseError } from '../../core/domain/errors/app-error.js';
 
 @injectable()
 export class MySQLConnector implements DatabaseConnector {
   private connection: mysql.Connection | null = null;
-  private typeMap: Record<string, string> = {
-    'int': 'number',
-    'smallint': 'number',
-    'tinyint': 'number',
-    'mediumint': 'number',
-    'bigint': 'number',
-    'float': 'number',
-    'double': 'number',
-    'decimal': 'number',
-    'varchar': 'string',
-    'text': 'string',
-    'char': 'string',
-    'enum': 'string',
-    'date': 'Date',
-    'datetime': 'Date',
-    'timestamp': 'Date',
-    'boolean': 'boolean',
-    'tinyint(1)': 'boolean'
-  };
 
   constructor(@inject('DatabaseConfig') private config: DatabaseConfig) {}
 
   async connect(): Promise<void> {
-    if (this.connection) return;
+    if (this.connection) {
+      return;
+    }
 
-    this.connection = await mysql.createConnection({
-      host: this.config.host,
-      user: this.config.user,
-      password: this.config.password,
-      database: this.config.database,
-      port: this.config.port || 3306
-    }) as mysql.Connection;
+    try {
+      this.connection = (await mysql.createConnection({
+        host: this.config.host,
+        user: this.config.user,
+        password: this.config.password,
+        database: this.config.database,
+        port: this.config.port || 3306,
+      })) as mysql.Connection;
+    } catch (error) {
+      throw new DatabaseError(
+        `Failed to connect to MySQL: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
   }
 
   async disconnect(): Promise<void> {
-    if (this.connection) {
+    if (!this.connection) {
+      return;
+    }
+
+    try {
       await this.connection.end();
+    } finally {
       this.connection = null;
     }
   }
 
+  async updateConfig(config: DatabaseConfig): Promise<void> {
+    await this.disconnect();
+    this.config = {
+      ...config,
+      port: config.port || 3306,
+    };
+  }
+
   getConnection(): mysql.Connection {
     if (!this.connection) {
-      throw new Error('Conexão não inicializada. Chame connect() primeiro.');
+      throw new DatabaseError('Connection not initialized. Call connect() first.');
     }
+
     return this.connection;
   }
 
@@ -59,45 +70,46 @@ export class MySQLConnector implements DatabaseConnector {
       await this.connect();
     }
 
-    const [rows] = await this.connection!.query(
-      `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_TYPE
-       FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_NAME = ? AND TABLE_SCHEMA = DATABASE()`,
-      [tableName]
-    );
+    try {
+      const [rows] = await this.connection!.query(
+        `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_TYPE
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_NAME = ? AND TABLE_SCHEMA = DATABASE()`,
+        [tableName]
+      );
 
-    const columns: ColumnMetadata[] = (rows as any[]).map(row => ({
-      name: row.COLUMN_NAME,
-      type: row.COLUMN_TYPE || row.DATA_TYPE,
-      nullable: row.IS_NULLABLE === 'YES'
-    }));
+      const castedRows = rows as Array<{
+        COLUMN_NAME: string;
+        DATA_TYPE: string;
+        IS_NULLABLE: string;
+        COLUMN_TYPE?: string;
+      }>;
 
-    return { name: tableName, columns };
+      if (castedRows.length === 0) {
+        throw new DatabaseError(`Table '${tableName}' not found in the current database.`);
+      }
+
+      const columns: ColumnMetadata[] = castedRows.map((row) => ({
+        name: row.COLUMN_NAME,
+        type: row.COLUMN_TYPE || row.DATA_TYPE,
+        nullable: row.IS_NULLABLE === 'YES',
+      }));
+
+      return { name: tableName, columns };
+    } catch (error) {
+      if (error instanceof DatabaseError) {
+        throw error;
+      }
+
+      throw new DatabaseError(
+        `Error describing table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
   }
 
-  async analyzeQuery(query: string): Promise<QueryResult> {
-    if (!this.connection) {
-      await this.connect();
-    }
-
-    try {      const [rows] = await this.connection!.query(`EXPLAIN ${query}`);
-      const tableNames = new Set<string>();
-
-      for (const row of rows as any[]) {
-        if (row.table) {
-          tableNames.add(row.table);
-        }
-      }
-            const fields: ColumnMetadata[] = [];
-
-      for (const tableName of tableNames) {
-        const { columns } = await this.describeTable(tableName);
-        fields.push(...columns);
-      }
-
-      return { fields, rows: [] };
-    } catch (error) {      return { fields: [], rows: [] };
-    }
+  async analyzeQuery(_query: string): Promise<QueryResult> {
+    return { fields: [], rows: [] };
   }
 
   async execute<T>(query: string, params: any[] = []): Promise<T[]> {
@@ -105,66 +117,94 @@ export class MySQLConnector implements DatabaseConnector {
       await this.connect();
     }
 
-    const [rows] = await this.connection!.query(query, params);
-    return rows as T[];
+    try {
+      const [rows] = await this.connection!.query(query, params);
+      return rows as T[];
+    } catch (error) {
+      throw new DatabaseError(
+        `Error executing query: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
   }
 
-  async analyzeQueryWithFields(query: string, fields: ReturnField[]): Promise<QueryResult> {
+  async getQueryMetadata(query: string, params: any[] = []): Promise<ColumnMetadata[]> {
     if (!this.connection) {
       await this.connect();
     }
 
     try {
-      const tableAliasMap = new Map<string, string>();
-      const aliasPattern = /(?:FROM|JOIN)\s+(\w+)(?:\s+(?:as\s+)?(\w+))?/gi;
-      let aliasMatch;
-      
-      while ((aliasMatch = aliasPattern.exec(query)) !== null) {
-        const tableName = aliasMatch[1].trim();
-        const alias = aliasMatch[2]?.trim();
-        
-        if (alias) {
-          tableAliasMap.set(alias, tableName);
-        }
+      let metadataQuery = query.trim();
+      if (
+        metadataQuery.toUpperCase().startsWith('SELECT') &&
+        !metadataQuery.toUpperCase().includes('LIMIT')
+      ) {
+        metadataQuery = `${metadataQuery} LIMIT 0`;
       }
 
-      const resultFields: ColumnMetadata[] = [];
-      
-      for (const field of fields) {
-        let tableName = field.sourceTable;
+      const [, fields] = await this.connection!.execute(metadataQuery, params);
 
-        if (tableName && tableAliasMap.has(tableName)) {
-          tableName = tableAliasMap.get(tableName)!;
-        }
-
-        if (tableName) {
-          try {
-            const tableMetadata = await this.describeTable(tableName);
-            const columnMetadata = tableMetadata.columns.find(col => col.name === field.sourceField);
-            
-            if (columnMetadata) {
-              resultFields.push({
-                name: field.alias || field.sourceField,
-                type: columnMetadata.type,
-                nullable: field.nullable !== undefined ? field.nullable : columnMetadata.nullable
-              });
-              continue;
-            }
-          } catch (error) {
-            console.warn(`Erro ao obter metadata para ${tableName}.${field.sourceField}`);
-          }
-        }
-
-        resultFields.push({
-          name: field.alias || field.sourceField,
-          type: field.type || 'unknown',
-          nullable: field.nullable !== undefined ? field.nullable : true
-        });
+      if (!fields) {
+        return [];
       }
-      
-      return { fields: resultFields, rows: [] };
-    } catch (error) {
-      return { fields: [], rows: [] };
+
+      return fields.map((field: any) => ({
+        name: field.name,
+        type: this.getSqlTypeName(field.type),
+        nullable: !(field.flags & 1),
+      }));
+    } catch {
+      try {
+        const [, fields] = await this.connection!.execute(query, params);
+        if (!fields) {
+          return [];
+        }
+
+        return fields.map((field: any) => ({
+          name: field.name,
+          type: this.getSqlTypeName(field.type),
+          nullable: !(field.flags & 1),
+        }));
+      } catch {
+        return [];
+      }
     }
+  }
+
+  private getSqlTypeName(type: number): string {
+    const types: Record<number, string> = {
+      0: 'DECIMAL',
+      1: 'TINY',
+      2: 'SHORT',
+      3: 'LONG',
+      4: 'FLOAT',
+      5: 'DOUBLE',
+      7: 'TIMESTAMP',
+      8: 'LONGLONG',
+      9: 'INT24',
+      10: 'DATE',
+      11: 'TIME',
+      12: 'DATETIME',
+      13: 'YEAR',
+      15: 'VARCHAR',
+      16: 'BIT',
+      245: 'JSON',
+      246: 'NEWDECIMAL',
+      247: 'ENUM',
+      248: 'SET',
+      249: 'TINY_BLOB',
+      250: 'MEDIUM_BLOB',
+      251: 'LONG_BLOB',
+      252: 'BLOB',
+      253: 'VAR_STRING',
+      254: 'STRING',
+      255: 'GEOMETRY',
+    };
+
+    return types[type] || 'UNKNOWN';
+  }
+
+  async analyzeQueryWithFields(_query: string, _fields: ReturnField[]): Promise<QueryResult> {
+    return { fields: [], rows: [] };
   }
 }
