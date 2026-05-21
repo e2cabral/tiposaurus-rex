@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
+  base: '/tiposaurus-rex/',
   title: 'Tiposaurus Rex',
   description: 'TypeScript type generator for annotated MySQL SQL files',
   themeConfig: {
