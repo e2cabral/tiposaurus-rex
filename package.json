@@ -1,6 +1,6 @@
 {
   "name": "tiposaurus-rex",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Gerador de tipos TypeScript para consultas SQL",
   "license": "MIT",
   "author": "Edson Cabral Junior <e2cabraljunior@gmail.com>",
