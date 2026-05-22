@@ -13,9 +13,11 @@ yarn-error.log*
 /.dist/**/*
 /dist
 install-and-generate.sh
-.junie
+/.junie/
 /coverage/**/*
 /docs/.vitepress/cache/*
 /docs/.vitepress/dist/*
 tiposaurus.config.json
 *.tgz
+
+/.idea/
