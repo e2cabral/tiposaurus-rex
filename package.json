@@ -53,7 +53,7 @@
   "bugs": {
     "url": "https://github.com/e2cabral/tiposaurus-rex/issues"
   },
-  "homepage": "https://github.com/e2cabral/tiposaurus-rex#readme",
+  "homepage": "https://e2cabral.github.io/tiposaurus-rex",
   "dependencies": {
     "boxen": "^8.0.1",
     "chalk": "^5.6.2",
